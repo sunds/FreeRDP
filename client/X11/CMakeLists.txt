@@ -39,6 +39,7 @@ add_executable(xfreerdp
 	xf_keyboard.h
 	xf_window.c
 	xf_window.h
+	xf_label.c
 	xfreerdp.c
 	xfreerdp.h)
 
@@ -94,5 +95,8 @@ target_link_libraries(xfreerdp freerdp-rail)
 target_link_libraries(xfreerdp freerdp-channels)
 target_link_libraries(xfreerdp freerdp-utils)
 target_link_libraries(xfreerdp ${X11_LIBRARIES} ${CMAKE_DL_LIBS})
+if(${CMAKE_SYSTEM_NAME} MATCHES SunOS)
+	target_link_libraries(xfreerdp tsol)
+endif()
 
 install(TARGETS xfreerdp DESTINATION ${CMAKE_INSTALL_BINDIR})

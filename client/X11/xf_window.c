@@ -388,7 +388,7 @@ xfWindow* xf_CreateWindow(xfInfo* xfi, rdpWindow* wnd, int x, int y, int width, 
 	XClassHint* class_hints;
 	int input_mask;
 
-	window->decorations = false;
+	window->decorations = xfi->decorations;
 	window->fullscreen = false;
 	window->window = wnd;
 	window->local_move.state = LMS_NOT_ACTIVE;
@@ -438,6 +438,7 @@ xfWindow* xf_CreateWindow(xfInfo* xfi, rdpWindow* wnd, int x, int y, int width, 
 	memset(&gcv, 0, sizeof(gcv));
 	window->gc = XCreateGC(xfi->display, window->handle, GCGraphicsExposures, &gcv);
 
+	xf_ConfigureLabel(xfi, window);
 	xf_MoveWindow(xfi, window, x, y, width, height);
 
 	return window;
@@ -707,6 +708,8 @@ void xf_UpdateWindowArea(xfInfo* xfi, xfWindow* window, int x, int y, int width,
 
 	XCopyArea(xfi->display, xfi->primary, window->handle, window->gc,
 			ax, ay, width, height, x, y);
+	if (y < window->label.height + 10)
+		xf_DrawLabel(xfi, window);
 
 	XFlush(xfi->display);
 }

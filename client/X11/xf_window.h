@@ -26,6 +26,7 @@
 
 typedef struct xf_localmove xfLocalMove;
 typedef struct xf_window xfWindow;
+typedef struct xf_label xfLabel;
 
 #include "xfreerdp.h"
 
@@ -49,6 +50,15 @@ enum xf_localmove_state
 	LMS_STARTING,
 	LMS_ACTIVE,
 	LMS_TERMINATING
+};
+
+struct xf_label
+{
+	int width;
+	int height;
+	int y;
+	GC gc;
+	char *label_name;
 };
 
 struct xf_localmove
@@ -76,6 +86,7 @@ struct xf_window
 	boolean is_mapped;
 	boolean is_transient;
 	xfLocalMove local_move;
+	xfLabel label;
 };
 
 void xf_ewmhints_init(xfInfo* xfi);
