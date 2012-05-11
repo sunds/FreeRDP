@@ -502,6 +502,9 @@ boolean xf_event_ConfigureNotify(xfInfo* xfi, XEvent* event, boolean app)
                 xfw->right = xfw->left + xfw->width - 1;
                 xfw->bottom = xfw->top + xfw->height - 1;
 
+		xfw->top += xfw->label.height;
+		xfw->height -= xfw->label.height;
+
 		DEBUG_X11_LMS("window=0x%X rc={l=%d t=%d r=%d b=%d} w=%u h=%u send_event=%d",
 			(uint32) xfw->handle, xfw->left, xfw->top, xfw->right, xfw->bottom,
 			xfw->width, xfw->height, event->xconfigure.send_event);

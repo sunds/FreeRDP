@@ -39,6 +39,14 @@ void xf_ConfigureLabel(xfInfo *xfi, xfWindow *xfw)
 	int descent_return;
 	XCharStruct overall_return;
 
+	rdpWindow *rdp = xfw->window;
+	printf("window=0x%X offset=%d,%d delta=%d,%d, clientArea= %d,%d %d+%d  visible=%d,%d  size=%d+%d\n",
+		xfw->handle,
+		rdp->windowOffsetX, rdp->windowOffsetY,
+		rdp->windowClientDeltaX, rdp->windowClientDeltaY,
+		rdp->clientOffsetX, rdp->clientOffsetY, rdp->clientAreaWidth, rdp->clientAreaHeight,
+		rdp->visibleOffsetX, rdp->visibleOffsetY,
+		rdp->windowWidth, rdp->windowHeight);
 
 	if (xfw->is_transient) 
 	{
@@ -82,36 +90,6 @@ void xf_ConfigureLabel(xfInfo *xfi, xfWindow *xfw)
 	}
 	xfree(color_name);
 
-/*
-	xfw->label.font = XLoadQueryFont(xfi->display, "courier");
-	gcv.font = xfw->label.font->fid;
-
-	xfw->label.handle = XCreateSimpleWindow(xfi->display, RootWindowOfScreen(xfi->screen),
-		xfw->left, xfw->top - xfw->label.height, 
-		xfw->width, xfw->height + xfw->label.height, 
-		0, bg_color.pixel, bg_color.pixel);
-
-	XSelectInput(xfi->display, xfw->label.handle, ExposureMask);
-
-	PropMotifWmHints hints;
-	hints.decorations = 0;
-	hints.functions = MWM_FUNC_ALL ; 
-	hints.flags = MWM_HINTS_DECORATIONS | MWM_HINTS_FUNCTIONS;
-
-	XChangeProperty(xfi->display, xfw->label.handle, xfi->_MOTIF_WM_HINTS, xfi->_MOTIF_WM_HINTS, 32,
-		PropModeReplace, (uint8*) &hints, PROP_MOTIF_WM_HINTS_ELEMENTS);
-
-	XSetWMProtocols(xfi->display, xfw->label.handle, &(xfi->WM_DELETE_WINDOW), 1);
-
-
-
-	XMapWindow(xfi->display, xfw->label.handle);
-	XClearWindow(xfi->display, xfw->label.handle);
-	xf_DrawLabel(xfi, xfw);
-	XReparentWindow(xfi->display, xfw->handle, xfw->label.handle, 0, xfw->label.height);
-
-*/
-
 	gcv.foreground = BlackPixel(xfi->display, DefaultScreen(xfi->display));
 	gcv.background = bg_color.pixel;
 	gcv.background = BlackPixel(xfi->display, DefaultScreen(xfi->display));
@@ -121,7 +99,8 @@ void xf_ConfigureLabel(xfInfo *xfi, xfWindow *xfw)
 		label_name, strlen(label_name), 
 		&dir_return, &ascent_return, &descent_return, &overall_return);
 
-	xfw->label.height = overall_return.ascent + overall_return.descent;
+	xfw->label.pad = 3;
+	xfw->label.height = overall_return.ascent + overall_return.descent + xfw->label.pad * 2;
 	xfw->label.y = overall_return.ascent;
 	xfw->label.width = overall_return.width;
 
@@ -134,11 +113,11 @@ void xf_DrawLabel(xfInfo *xfi, xfWindow *xfw)
 	if (! xfw->is_transient && xfw->label.label_name)
 	{
 		XClearArea(xfi->display, xfw->handle, 
-			(xfw->width / 2) - (xfw->label.width / 2) - 5, 3, 
-			xfw->label.width + 10, 7 + xfw->label.height, False);	
+			0, 0, xfw->width, xfw->label.height, False);
+
 		XDrawString(xfi->display, xfw->handle, xfw->label.gc,
 			(xfw->width / 2) - (xfw->label.width / 2), 
-			xfw->label.height + 5,
+			xfw->label.height - xfw->label.pad,
 			xfw->label.label_name, strlen(xfw->label.label_name));
 	}
 }

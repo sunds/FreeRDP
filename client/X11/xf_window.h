@@ -44,6 +44,44 @@ typedef struct xf_label xfLabel;
 #define _NET_WM_MOVERESIZE_MOVE_KEYBOARD    10   /* move via keyboard */
 #define _NET_WM_MOVERESIZE_CANCEL           11   /* cancel operation */
 
+/* Extended Window Manager Hints: http://standards.freedesktop.org/wm-spec/wm-spec-1.3.html */
+
+/* bit definitions for MwmHints.flags */
+#define MWM_HINTS_FUNCTIONS     (1L << 0)
+#define MWM_HINTS_DECORATIONS   (1L << 1)
+#define MWM_HINTS_INPUT_MODE    (1L << 2)
+#define MWM_HINTS_STATUS        (1L << 3)
+
+/* bit definitions for MwmHints.functions */
+#define MWM_FUNC_ALL            (1L << 0)
+#define MWM_FUNC_RESIZE         (1L << 1)
+#define MWM_FUNC_MOVE           (1L << 2)
+#define MWM_FUNC_MINIMIZE       (1L << 3)
+#define MWM_FUNC_MAXIMIZE       (1L << 4)
+#define MWM_FUNC_CLOSE          (1L << 5)
+
+/* bit definitions for MwmHints.decorations */
+#define MWM_DECOR_ALL           (1L << 0)
+#define MWM_DECOR_BORDER        (1L << 1)
+#define MWM_DECOR_RESIZEH       (1L << 2)
+#define MWM_DECOR_TITLE         (1L << 3)
+#define MWM_DECOR_MENU          (1L << 4)
+#define MWM_DECOR_MINIMIZE      (1L << 5)
+#define MWM_DECOR_MAXIMIZE      (1L << 6)
+
+#define PROP_MOTIF_WM_HINTS_ELEMENTS	5
+
+struct _PropMotifWmHints
+{
+	unsigned long flags;
+	unsigned long functions;
+	unsigned long decorations;
+	long inputMode;
+	unsigned long status;
+};
+typedef struct _PropMotifWmHints PropMotifWmHints;
+
+
 enum xf_localmove_state
 {
 	LMS_NOT_ACTIVE,
@@ -56,9 +94,12 @@ struct xf_label
 {
 	int width;
 	int height;
+	int pad;
 	int y;
 	GC gc;
 	char *label_name;
+	Window handle;
+	XFontStruct *font;
 };
 
 struct xf_localmove
@@ -120,5 +161,7 @@ void xf_SetWindowMinMaxInfo(xfInfo* xfi, xfWindow* window, int maxWidth, int max
 void xf_StartLocalMoveSize(xfInfo* xfi, xfWindow* window, int direction, int x, int y);
 void xf_EndLocalMoveSize(xfInfo *xfi, xfWindow *window);
 void xf_SendClientEvent(xfInfo *xfi, xfWindow* window, Atom atom, unsigned int numArgs, ...);
+void xf_ConfigureLabel(xfInfo *xfi, xfWindow *xfw) ;
+void xf_DrawLabel(xfInfo *xfi, xfWindow *xfw);
 
 #endif /* __XF_WINDOW_H */

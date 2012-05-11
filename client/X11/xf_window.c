@@ -34,43 +34,6 @@
 
 #include "xf_window.h"
 
-/* Extended Window Manager Hints: http://standards.freedesktop.org/wm-spec/wm-spec-1.3.html */
-
-/* bit definitions for MwmHints.flags */
-#define MWM_HINTS_FUNCTIONS     (1L << 0)
-#define MWM_HINTS_DECORATIONS   (1L << 1)
-#define MWM_HINTS_INPUT_MODE    (1L << 2)
-#define MWM_HINTS_STATUS        (1L << 3)
-
-/* bit definitions for MwmHints.functions */
-#define MWM_FUNC_ALL            (1L << 0)
-#define MWM_FUNC_RESIZE         (1L << 1)
-#define MWM_FUNC_MOVE           (1L << 2)
-#define MWM_FUNC_MINIMIZE       (1L << 3)
-#define MWM_FUNC_MAXIMIZE       (1L << 4)
-#define MWM_FUNC_CLOSE          (1L << 5)
-
-/* bit definitions for MwmHints.decorations */
-#define MWM_DECOR_ALL           (1L << 0)
-#define MWM_DECOR_BORDER        (1L << 1)
-#define MWM_DECOR_RESIZEH       (1L << 2)
-#define MWM_DECOR_TITLE         (1L << 3)
-#define MWM_DECOR_MENU          (1L << 4)
-#define MWM_DECOR_MINIMIZE      (1L << 5)
-#define MWM_DECOR_MAXIMIZE      (1L << 6)
-
-#define PROP_MOTIF_WM_HINTS_ELEMENTS	5
-
-struct _PropMotifWmHints
-{
-	unsigned long flags;
-	unsigned long functions;
-	unsigned long decorations;
-	long inputMode;
-	unsigned long status;
-};
-typedef struct _PropMotifWmHints PropMotifWmHints;
-
 /**
  * Post an event from the client to the X server
  */
@@ -409,7 +372,7 @@ xfWindow* xf_CreateWindow(xfInfo* xfi, rdpWindow* wnd, int x, int y, int width, 
 	XClassHint* class_hints;
 	int input_mask;
 
-	window->decorations = xfi->decorations;
+	window->decorations = false;
 	window->fullscreen = false;
 	window->window = wnd;
 	window->local_move.state = LMS_NOT_ACTIVE;
@@ -566,13 +529,8 @@ void xf_EndLocalMoveSize(xfInfo *xfi, xfWindow *window)
 
 void xf_MoveWindow(xfInfo* xfi, xfWindow* window, int x, int y, int width, int height)
 {
-	boolean resize = false;
-
 	if ((width * height) < 1)
 		return;
-
-	if ((window->width != width) || (window->height != height))
-		resize = true;
 
 	if (window->local_move.state == LMS_STARTING ||
 		window->local_move.state == LMS_ACTIVE)
@@ -595,10 +553,10 @@ void xf_MoveWindow(xfInfo* xfi, xfWindow* window, int x, int y, int width, int h
 	window->width = width;
 	window->height = height;
 
-	if (resize)
-		XMoveResizeWindow(xfi->display, window->handle, x, y, width, height);
-	else
-		XMoveWindow(xfi->display, window->handle, x, y);
+	height += window->label.height;	
+	y -= window->label.height;
+
+	XMoveResizeWindow(xfi->display, window->handle, x, y, width, height);
 
 	xf_UpdateWindowArea(xfi, window, 0, 0, width, height);
 }
@@ -726,6 +684,8 @@ void xf_UpdateWindowArea(xfInfo* xfi, xfWindow* window, int x, int y, int width,
 		XPutImage(xfi->display, xfi->primary, window->gc, xfi->image,
 			ax, ay, ax, ay, width, height);
 	}
+
+	y += window->label.height;
 
 	XCopyArea(xfi->display, xfi->primary, window->handle, window->gc,
 			ax, ay, width, height, x, y);
