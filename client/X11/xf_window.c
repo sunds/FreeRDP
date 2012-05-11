@@ -630,7 +630,7 @@ void xf_SetWindowRects(xfInfo* xfi, xfWindow* window, RECTANGLE_16* rects, int n
 	for (i = 0; i < nrects; i++)
 	{
 		xrects[i].x = rects[i].left;
-		xrects[i].y = rects[i].top;
+		xrects[i].y = rects[i].top + window->label.height;
 		xrects[i].width = rects[i].right - rects[i].left;
 		xrects[i].height = rects[i].bottom - rects[i].top;
 	}
@@ -652,7 +652,7 @@ void xf_SetWindowVisibilityRects(xfInfo* xfi, xfWindow* window, RECTANGLE_16* re
 	for (i = 0; i < nrects; i++)
 	{
 		xrects[i].x = rects[i].left;
-		xrects[i].y = rects[i].top;
+		xrects[i].y = rects[i].top + window->label.height;
 		xrects[i].width = rects[i].right - rects[i].left;
 		xrects[i].height = rects[i].bottom - rects[i].top;
 	}

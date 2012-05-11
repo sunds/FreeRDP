@@ -94,6 +94,7 @@ boolean xf_event_Expose(xfInfo* xfi, XEvent* event, boolean app)
 		if (window != NULL)
 		{
 			xfw = (xfWindow*) window->extra;
+			y -= xfw->label.height;
 			xf_UpdateWindowArea(xfi, xfw, x, y, w, h);
 		}
 	}
