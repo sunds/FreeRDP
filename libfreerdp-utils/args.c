@@ -1,4 +1,4 @@
-/**
+/*
  * FreeRDP: A Remote Desktop Protocol client.
  * Arguments Parsing
  *
@@ -36,7 +36,7 @@
  * @param plugin_user_data pointer to be passed to the plugin_callback function.
  * @param ui_callback function to be called when a UI-specific argument is being processed.
  * @param ui_user_data pointer to be passed to the ui_callback function.
- * @return number of arguments that has been parsed, or 0 if error occurred.
+ * @return number of arguments that were parsed, or FREERDP_ARGS_PARSE_RESULT on failure or --version/--help
  */
 int freerdp_parse_args(rdpSettings* settings, int argc, char** argv,
 	ProcessPluginArgs plugin_callback, void* plugin_user_data,
@@ -69,7 +69,6 @@ int freerdp_parse_args(rdpSettings* settings, int argc, char** argv,
 				"  -h: print this help\n"
 				"  -k: set keyboard layout ID\n"
 				"  -K: do not interfere with window manager bindings\n"
-				"  -m: don't send mouse motion events\n"
 				"  -n: hostname\n"
 				"  -o: console audio\n"
 				"  -p: password\n"
@@ -83,6 +82,7 @@ int freerdp_parse_args(rdpSettings* settings, int argc, char** argv,
 				"  --ext: load an extension\n"
 				"  --no-auth: disable authentication\n"
 				"  --no-fastpath: disable fast-path\n"
+				"  --no-motion: don't send mouse motion events\n"
 				"  --gdi: graphics rendering (hw, sw)\n"
 				"  --no-osb: disable offscreen bitmaps\n"
 				"  --no-bmp-cache: disable bitmap cache\n"
@@ -100,10 +100,14 @@ int freerdp_parse_args(rdpSettings* settings, int argc, char** argv,
 				"  --no-nla: disable network level authentication\n"
 				"  --ntlm: force NTLM authentication protocol version (1 or 2)\n"
 				"  --ignore-certificate: ignore verification of logon certificate\n"
+				"  --certificate-name: use this name for the logon certificate, instead of the server name\n"
 				"  --sec: force protocol security (rdp, tls or nla)\n"
+				"  --tsg: Terminal Server Gateway (<username> <password> <hostname>)\n"
+				"  --kbd-list: list all keyboard layout ids used by -k\n"
+				"  --no-salted-checksum: disable salted checksums with Standard RDP encryption\n"
 				"  --version: print version information\n"
 				"\n", argv[0]);
-			return -1; //TODO: What is the correct return
+			return FREERDP_ARGS_PARSE_HELP; /* TODO: What is the correct return? */
 		}
 		else if (strcmp("-a", argv[index]) == 0)
 		{
@@ -111,7 +115,7 @@ int freerdp_parse_args(rdpSettings* settings, int argc, char** argv,
 			if (index == argc)
 			{
 				printf("missing color depth\n");
-				return -1;
+				return FREERDP_ARGS_PARSE_FAILURE;
 			}
 			settings->color_depth = atoi(argv[index]);
 		}
@@ -121,7 +125,7 @@ int freerdp_parse_args(rdpSettings* settings, int argc, char** argv,
 			if (index == argc)
 			{
 				printf("missing username\n");
-				return -1;
+				return FREERDP_ARGS_PARSE_FAILURE;
 			}
 			settings->username = xstrdup(argv[index]);
 		}
@@ -131,7 +135,7 @@ int freerdp_parse_args(rdpSettings* settings, int argc, char** argv,
 			if (index == argc)
 			{
 				printf("missing password\n");
-				return -1;
+				return FREERDP_ARGS_PARSE_FAILURE;
 			}
 			settings->password = xstrdup(argv[index]);
 			settings->autologon = 1;
@@ -149,7 +153,7 @@ int freerdp_parse_args(rdpSettings* settings, int argc, char** argv,
 			if (index == argc)
 			{
 				printf("missing domain\n");
-				return -1;
+				return FREERDP_ARGS_PARSE_FAILURE;
 			}
 			settings->domain = xstrdup(argv[index]);
 		}
@@ -159,7 +163,7 @@ int freerdp_parse_args(rdpSettings* settings, int argc, char** argv,
 			if (index == argc)
 			{
 				printf("missing shell\n");
-				return -1;
+				return FREERDP_ARGS_PARSE_FAILURE;
 			}
 			settings->shell = xstrdup(argv[index]);
 		}
@@ -169,7 +173,7 @@ int freerdp_parse_args(rdpSettings* settings, int argc, char** argv,
 			if (index == argc)
 			{
 				printf("missing directory\n");
-				return -1;
+				return FREERDP_ARGS_PARSE_FAILURE;
 			}
 			settings->directory = xstrdup(argv[index]);
 		}
@@ -179,7 +183,7 @@ int freerdp_parse_args(rdpSettings* settings, int argc, char** argv,
 			if (index == argc)
 			{
 				printf("missing dimensions\n");
-				return -1;
+				return FREERDP_ARGS_PARSE_FAILURE;
 			}
 
 			if (strncmp("workarea", argv[index], 1) == 0)
@@ -200,7 +204,7 @@ int freerdp_parse_args(rdpSettings* settings, int argc, char** argv,
 					if (settings->percent_screen <= 0 || settings->percent_screen > 100)
 					{
 						printf("invalid geometry percentage\n");
-						return -1;
+						return FREERDP_ARGS_PARSE_FAILURE;
 					}
 				}
 				else
@@ -224,7 +228,7 @@ int freerdp_parse_args(rdpSettings* settings, int argc, char** argv,
 			if (index == argc)
 			{
 				printf("missing window title\n");
-				return -1;
+				return FREERDP_ARGS_PARSE_FAILURE;
 			}
 
 			settings->window_title = xstrdup(argv[index]);
@@ -235,7 +239,7 @@ int freerdp_parse_args(rdpSettings* settings, int argc, char** argv,
 			if (index == argc)
 			{
 				printf("missing port number\n");
-				return -1;
+				return FREERDP_ARGS_PARSE_FAILURE;
 			}
 			settings->port = atoi(argv[index]);
 		}
@@ -245,7 +249,7 @@ int freerdp_parse_args(rdpSettings* settings, int argc, char** argv,
 			if (index == argc)
 			{
 				printf("missing keyboard layout id\n");
-				return -1;
+				return FREERDP_ARGS_PARSE_FAILURE;
 			}
 			sscanf(argv[index], "%X", &(settings->kbd_layout));
 		}
@@ -259,7 +263,7 @@ int freerdp_parse_args(rdpSettings* settings, int argc, char** argv,
 			if (index == argc)
 			{
 				printf("missing client hostname\n");
-				return -1;
+				return FREERDP_ARGS_PARSE_FAILURE;
 			}
 			strncpy(settings->client_hostname, argv[index], sizeof(settings->client_hostname) - 1);
 			settings->client_hostname[sizeof(settings->client_hostname) - 1] = 0;
@@ -305,6 +309,17 @@ int freerdp_parse_args(rdpSettings* settings, int argc, char** argv,
 		{
 			settings->ignore_certificate = true;
 		}
+		else if (strcmp("--certificate-name", argv[index]) == 0)
+		{
+			index++;
+			if (index == argc)
+			{
+				printf("missing certificate name\n");
+				return FREERDP_ARGS_PARSE_FAILURE;
+			}
+
+			settings->certificate_name = xstrdup(argv[index]);
+		}
 		else if (strcmp("--no-fastpath", argv[index]) == 0)
 		{
 			settings->fastpath_input = false;
@@ -316,7 +331,7 @@ int freerdp_parse_args(rdpSettings* settings, int argc, char** argv,
 			if (index == argc)
 			{
 				printf("missing GDI backend\n");
-				return -1;
+				return FREERDP_ARGS_PARSE_FAILURE;
 			}
 			if (strncmp("sw", argv[index], 1) == 0) /* software */
 			{
@@ -329,7 +344,7 @@ int freerdp_parse_args(rdpSettings* settings, int argc, char** argv,
 			else
 			{
 				printf("unknown GDI backend\n");
-				return -1;
+				return FREERDP_ARGS_PARSE_FAILURE;
 			}
 		}
 		else if (strcmp("--rfx", argv[index]) == 0)
@@ -347,7 +362,7 @@ int freerdp_parse_args(rdpSettings* settings, int argc, char** argv,
 			if (index == argc)
 			{
 				printf("missing RemoteFX mode flag\n");
-				return -1;
+				return FREERDP_ARGS_PARSE_FAILURE;
 			}
 			if (argv[index][0] == 'v') /* video */
 			{
@@ -360,7 +375,7 @@ int freerdp_parse_args(rdpSettings* settings, int argc, char** argv,
 			else
 			{
 				printf("unknown RemoteFX mode flag\n");
-				return -1;
+				return FREERDP_ARGS_PARSE_FAILURE;
 			}
 		}
 		else if (strcmp("--nsc", argv[index]) == 0)
@@ -373,7 +388,7 @@ int freerdp_parse_args(rdpSettings* settings, int argc, char** argv,
 			if (index == argc)
 			{
 				printf("missing file name\n");
-				return -1;
+				return FREERDP_ARGS_PARSE_FAILURE;
 			}
 			settings->dump_rfx_file = xstrdup(argv[index]);
 			settings->dump_rfx = true;
@@ -384,7 +399,7 @@ int freerdp_parse_args(rdpSettings* settings, int argc, char** argv,
 			if (index == argc)
 			{
 				printf("missing file name\n");
-				return -1;
+				return FREERDP_ARGS_PARSE_FAILURE;
 			}
 			settings->play_rfx_file = xstrdup(argv[index]);
 			settings->play_rfx = true;
@@ -430,7 +445,7 @@ int freerdp_parse_args(rdpSettings* settings, int argc, char** argv,
 			if (index == argc)
 			{
 				printf("missing performance flag\n");
-				return -1;
+				return FREERDP_ARGS_PARSE_FAILURE;
 			}
 			if (argv[index][0] == 'm') /* modem */
 			{
@@ -462,15 +477,15 @@ int freerdp_parse_args(rdpSettings* settings, int argc, char** argv,
 			if (index == argc)
 			{
 				printf("missing parent window XID\n");
-				return -1;
+				return FREERDP_ARGS_PARSE_FAILURE;
 			}
 
-			settings->parent_window_xid = strtoul(argv[index], NULL, 16);
+			settings->parent_window_xid = strtol(argv[index], NULL, 0);
 
 			if (settings->parent_window_xid == 0)
 			{
 				printf("invalid parent window XID\n");
-				return -1;
+				return FREERDP_ARGS_PARSE_FAILURE;
 			}
 		}
 		else if (strcmp("--no-rdp", argv[index]) == 0)
@@ -491,7 +506,7 @@ int freerdp_parse_args(rdpSettings* settings, int argc, char** argv,
 			if (index == argc)
 			{
 				printf("missing protocol security\n");
-				return -1;
+				return FREERDP_ARGS_PARSE_FAILURE;
 			}
 			if (strncmp("rdp", argv[index], 1) == 0) /* Standard RDP */
 			{
@@ -517,8 +532,33 @@ int freerdp_parse_args(rdpSettings* settings, int argc, char** argv,
 			else
 			{
 				printf("unknown protocol security\n");
+				return FREERDP_ARGS_PARSE_FAILURE;
+			}
+		}
+		else if (strcmp("--tsg", argv[index]) == 0)
+		{
+			settings->ts_gateway = true;
+			index++;
+			if (index == argc)
+			{
+				printf("missing TSG username\n");
 				return -1;
 			}
+			settings->tsg_username = xstrdup(argv[index]);
+			index++;
+			if (index == argc)
+			{
+				printf("missing TSG password\n");
+				return -1;
+			}
+			settings->tsg_password = xstrdup(argv[index]);
+			index++;
+			if (index == argc)
+			{
+				printf("missing TSG server\n");
+				return -1;
+			}
+			settings->tsg_hostname = xstrdup(argv[index]);
 		}
 		else if (strcmp("--plugin", argv[index]) == 0)
 		{
@@ -527,22 +567,32 @@ int freerdp_parse_args(rdpSettings* settings, int argc, char** argv,
 			if (index == argc)
 			{
 				printf("missing plugin name\n");
-				return -1;
+				return FREERDP_ARGS_PARSE_FAILURE;
 			}
 			plugin_data = NULL;
+			if (strstr(argv[t], "rdpsnd"))
+				settings->audio_playback = true;
 			if (index < argc - 1 && strcmp("--data", argv[index + 1]) == 0)
 			{
 				index += 2;
 				i = 0;
 				while (index < argc && strcmp("--", argv[index]) != 0)
 				{
-					plugin_data = (RDP_PLUGIN_DATA*)xrealloc(plugin_data, sizeof(RDP_PLUGIN_DATA) * (i + 2));
+					if (plugin_data == NULL)
+						plugin_data = (RDP_PLUGIN_DATA*) xmalloc(sizeof(RDP_PLUGIN_DATA) * (i + 2));
+					else
+						plugin_data = (RDP_PLUGIN_DATA*) xrealloc(plugin_data, sizeof(RDP_PLUGIN_DATA) * (i + 2));
+
+					if (strstr(argv[t], "drdynvc") && strstr(argv[index], "audin"))
+						settings->audio_capture = true;
+
 					plugin_data[i].size = sizeof(RDP_PLUGIN_DATA);
 					plugin_data[i].data[0] = NULL;
 					plugin_data[i].data[1] = NULL;
 					plugin_data[i].data[2] = NULL;
 					plugin_data[i].data[3] = NULL;
 					plugin_data[i + 1].size = 0;
+
 					for (j = 0, p = argv[index]; j < 4 && p != NULL; j++)
 					{
 						if (*p == '\'')
@@ -567,7 +617,7 @@ int freerdp_parse_args(rdpSettings* settings, int argc, char** argv,
 			if (plugin_callback != NULL)
 			{
 				if (!plugin_callback(settings, argv[t], plugin_data, plugin_user_data))
-					return -1;
+					return FREERDP_ARGS_PARSE_FAILURE;
 			}
 		}
 		else if (strcmp("--ext", argv[index]) == 0)
@@ -576,12 +626,12 @@ int freerdp_parse_args(rdpSettings* settings, int argc, char** argv,
 			if (index == argc)
 			{
 				printf("missing extension name\n");
-				return -1;
+				return FREERDP_ARGS_PARSE_FAILURE;
 			}
-			if (num_extensions >= sizeof(settings->extensions) / sizeof(struct rdp_ext_set))
+			if (num_extensions >= ARRAY_SIZE(settings->extensions))
 			{
 				printf("maximum extensions reached\n");
-				return -1;
+				return FREERDP_ARGS_PARSE_FAILURE;
 			}
 			snprintf(settings->extensions[num_extensions].name,
 				sizeof(settings->extensions[num_extensions].name),
@@ -600,10 +650,14 @@ int freerdp_parse_args(rdpSettings* settings, int argc, char** argv,
 			}
 			num_extensions++;
 		}
+		else if (strcmp("--no-salted-checksum", argv[index]) == 0)
+		{
+			settings->salted_checksum = false;
+		}
 		else if (strcmp("--version", argv[index]) == 0)
 		{
 			printf("This is FreeRDP version %s\n", FREERDP_VERSION_FULL);
-			return -1;
+			return FREERDP_ARGS_PARSE_VERSION;
 		}
 		else if (argv[index][0] != '-')
 		{
@@ -662,7 +716,7 @@ int freerdp_parse_args(rdpSettings* settings, int argc, char** argv,
 				if (t == 0)
 				{
 					printf("invalid option: %s\n", argv[index]);
-					return -1;
+					return FREERDP_ARGS_PARSE_FAILURE;
 				}
 				index += t - 1;
 			}
@@ -670,5 +724,5 @@ int freerdp_parse_args(rdpSettings* settings, int argc, char** argv,
 		index++;
 	}
 	printf("missing server name\n");
-	return -1;
+	return FREERDP_ARGS_PARSE_FAILURE;
 }

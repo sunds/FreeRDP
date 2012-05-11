@@ -1,4 +1,4 @@
-/**
+/*
  * FreeRDP: A Remote Desktop Protocol Client
  * Connection Sequence
  *
@@ -17,46 +17,46 @@
  * limitations under the License.
  */
 
-#include "per.h"
 #include "info.h"
 #include "input.h"
 
 #include "connection.h"
 
 /**
- *                                      Connection Sequence
- *     client                                                                    server
- *        |                                                                         |
- *        |-----------------------X.224 Connection Request PDU--------------------->|
- *        |<----------------------X.224 Connection Confirm PDU----------------------|
- *        |-------MCS Connect-Initial PDU with GCC Conference Create Request------->|
- *        |<-----MCS Connect-Response PDU with GCC Conference Create Response-------|
- *        |------------------------MCS Erect Domain Request PDU-------------------->|
- *        |------------------------MCS Attach User Request PDU--------------------->|
- *        |<-----------------------MCS Attach User Confirm PDU----------------------|
- *        |------------------------MCS Channel Join Request PDU-------------------->|
- *        |<-----------------------MCS Channel Join Confirm PDU---------------------|
- *        |----------------------------Security Exchange PDU----------------------->|
- *        |-------------------------------Client Info PDU-------------------------->|
- *        |<---------------------License Error PDU - Valid Client-------------------|
- *        |<-----------------------------Demand Active PDU--------------------------|
- *        |------------------------------Confirm Active PDU------------------------>|
- *        |-------------------------------Synchronize PDU-------------------------->|
- *        |---------------------------Control PDU - Cooperate---------------------->|
- *        |------------------------Control PDU - Request Control------------------->|
- *        |--------------------------Persistent Key List PDU(s)-------------------->|
- *        |--------------------------------Font List PDU--------------------------->|
- *        |<------------------------------Synchronize PDU---------------------------|
- *        |<--------------------------Control PDU - Cooperate-----------------------|
- *        |<-----------------------Control PDU - Granted Control--------------------|
- *        |<-------------------------------Font Map PDU-----------------------------|
+ *                                      Connection Sequence\n
+ *     client                                                                    server\n
+ *        |                                                                         |\n
+ *        |-----------------------X.224 Connection Request PDU--------------------->|\n
+ *        |<----------------------X.224 Connection Confirm PDU----------------------|\n
+ *        |-------MCS Connect-Initial PDU with GCC Conference Create Request------->|\n
+ *        |<-----MCS Connect-Response PDU with GCC Conference Create Response-------|\n
+ *        |------------------------MCS Erect Domain Request PDU-------------------->|\n
+ *        |------------------------MCS Attach User Request PDU--------------------->|\n
+ *        |<-----------------------MCS Attach User Confirm PDU----------------------|\n
+ *        |------------------------MCS Channel Join Request PDU-------------------->|\n
+ *        |<-----------------------MCS Channel Join Confirm PDU---------------------|\n
+ *        |----------------------------Security Exchange PDU----------------------->|\n
+ *        |-------------------------------Client Info PDU-------------------------->|\n
+ *        |<---------------------License Error PDU - Valid Client-------------------|\n
+ *        |<-----------------------------Demand Active PDU--------------------------|\n
+ *        |------------------------------Confirm Active PDU------------------------>|\n
+ *        |-------------------------------Synchronize PDU-------------------------->|\n
+ *        |---------------------------Control PDU - Cooperate---------------------->|\n
+ *        |------------------------Control PDU - Request Control------------------->|\n
+ *        |--------------------------Persistent Key List PDU(s)-------------------->|\n
+ *        |--------------------------------Font List PDU--------------------------->|\n
+ *        |<------------------------------Synchronize PDU---------------------------|\n
+ *        |<--------------------------Control PDU - Cooperate-----------------------|\n
+ *        |<-----------------------Control PDU - Granted Control--------------------|\n
+ *        |<-------------------------------Font Map PDU-----------------------------|\n
  *
  */
 
 /**
- * Establish RDP Connection.\n
+ * Establish RDP Connection based on the settings given in the 'rdp' paremeter.
  * @msdn{cc240452}
  * @param rdp RDP module
+ * @return true if the connection succeeded. false otherwise.
  */
 
 boolean rdp_client_connect(rdpRdp* rdp)
@@ -69,8 +69,12 @@ boolean rdp_client_connect(rdpRdp* rdp)
 	nego_set_target(rdp->nego, settings->hostname, settings->port);
 	nego_set_cookie(rdp->nego, settings->username);
 	nego_enable_rdp(rdp->nego, settings->rdp_security);
-	nego_enable_nla(rdp->nego, settings->nla_security);
-	nego_enable_tls(rdp->nego, settings->tls_security);
+
+	if (!settings->ts_gateway)
+	{
+		nego_enable_nla(rdp->nego, settings->nla_security);
+		nego_enable_tls(rdp->nego, settings->tls_security);
+	}
 
 	if (nego_connect(rdp->nego) != true)
 	{
@@ -82,7 +86,7 @@ boolean rdp_client_connect(rdpRdp* rdp)
 
 	if ((selectedProtocol & PROTOCOL_TLS) || (selectedProtocol == PROTOCOL_RDP))
 	{
-		if ((settings->username != NULL) && (settings->password != NULL))
+		if ((settings->username != NULL) && ((settings->password != NULL) || (settings->password_cookie != NULL && settings->password_cookie->length > 0)))
 			settings->autologon = true;
 	}
 
@@ -103,15 +107,20 @@ boolean rdp_client_connect(rdpRdp* rdp)
 
 	if (mcs_send_connect_initial(rdp->mcs) != true)
 	{
+		if(!connectErrorCode){
+			connectErrorCode = MCSCONNECTINITIALERROR;                      
+		}
 		printf("Error: unable to send MCS Connect Initial\n");
 		return false;
 	}
 
+	rdp->transport->process_single_pdu = true;
 	while (rdp->state != CONNECTION_STATE_ACTIVE)
 	{
 		if (rdp_check_fds(rdp) < 0)
 			return false;
 	}
+	rdp->transport->process_single_pdu = false;
 
 	return true;
 }
@@ -128,10 +137,22 @@ boolean rdp_client_redirect(rdpRdp* rdp)
 
 	rdp_client_disconnect(rdp);
 
+	/* FIXME: this is a subset of rdp_free */
+	crypto_rc4_free(rdp->rc4_decrypt_key);
+	crypto_rc4_free(rdp->rc4_encrypt_key);
+	crypto_des3_free(rdp->fips_encrypt);
+	crypto_des3_free(rdp->fips_decrypt);
+	crypto_hmac_free(rdp->fips_hmac);
 	mcs_free(rdp->mcs);
 	nego_free(rdp->nego);
 	license_free(rdp->license);
 	transport_free(rdp->transport);
+
+	/* FIXME: this is a subset of settings_free */
+	freerdp_blob_free(settings->server_random);
+	freerdp_blob_free(settings->server_certificate);
+	xfree(settings->ip_address);
+
 	rdp->transport = transport_new(settings);
 	rdp->license = license_new(rdp);
 	rdp->nego = nego_new(rdp->transport);
@@ -141,48 +162,51 @@ boolean rdp_client_redirect(rdpRdp* rdp)
 	settings->redirected_session_id = redirection->sessionID;
 
 	if (redirection->flags & LB_LOAD_BALANCE_INFO)
+	{
 		nego_set_routing_token(rdp->nego, &redirection->loadBalanceInfo);
-
-	if (redirection->flags & LB_TARGET_NET_ADDRESS)
-	{
-		xfree(settings->hostname);
-		settings->hostname = redirection->targetNetAddress.ascii;
-        }
-	else if (redirection->flags & LB_TARGET_FQDN)
-	{
-		xfree(settings->hostname);
-		settings->hostname = redirection->targetFQDN.ascii;
 	}
-	else if (redirection->flags & LB_TARGET_NETBIOS_NAME)
+	else
 	{
-		xfree(settings->hostname);
-		settings->hostname = redirection->targetNetBiosName.ascii;
+		if (redirection->flags & LB_TARGET_NET_ADDRESS)
+		{
+			xfree(settings->hostname);
+			settings->hostname = xstrdup(redirection->targetNetAddress.ascii);
+		}
+		else if (redirection->flags & LB_TARGET_FQDN)
+		{
+			xfree(settings->hostname);
+			settings->hostname = xstrdup(redirection->targetFQDN.ascii);
+		}
+		else if (redirection->flags & LB_TARGET_NETBIOS_NAME)
+		{
+			xfree(settings->hostname);
+			settings->hostname = xstrdup(redirection->targetNetBiosName.ascii);
+		}
 	}
 
 	if (redirection->flags & LB_USERNAME)
 	{
 		xfree(settings->username);
-		settings->username = redirection->username.ascii;
+		settings->username = xstrdup(redirection->username.ascii);
 	}
 
 	if (redirection->flags & LB_DOMAIN)
 	{
 		xfree(settings->domain);
-		settings->domain = redirection->domain.ascii;
+		settings->domain = xstrdup(redirection->domain.ascii);
 	}
 
 	if (redirection->flags & LB_PASSWORD)
 	{
-		xfree(settings->password);
-		settings->password = redirection->password.ascii;
+		settings->password_cookie = &redirection->password_cookie;
 	}
 
 	return rdp_client_connect(rdp);
 }
 
-static boolean rdp_establish_keys(rdpRdp* rdp)
+static boolean rdp_client_establish_keys(rdpRdp* rdp)
 {
-	uint8 client_random[32];
+	uint8 client_random[CLIENT_RANDOM_LENGTH];
 	uint8 crypt_client_random[256 + 8];
 	uint32 key_len;
 	uint8* mod;
@@ -198,29 +222,20 @@ static boolean rdp_establish_keys(rdpRdp* rdp)
 
 	/* encrypt client random */
 	memset(crypt_client_random, 0, sizeof(crypt_client_random));
-	memset(client_random, 0x5e, 32);
-	crypto_nonce(client_random, 32);
+	crypto_nonce(client_random, sizeof(client_random));
 	key_len = rdp->settings->server_cert->cert_info.modulus.length;
 	mod = rdp->settings->server_cert->cert_info.modulus.data;
 	exp = rdp->settings->server_cert->cert_info.exponent;
-	crypto_rsa_encrypt(client_random, 32, key_len, mod, exp, crypt_client_random);
+	crypto_rsa_public_encrypt(client_random, sizeof(client_random), key_len, mod, exp, crypt_client_random);
 
 	/* send crypt client random to server */
-	length = 7 + 8 + 4 + 4 + key_len + 8;
+	length = RDP_PACKET_HEADER_MAX_LENGTH + RDP_SECURITY_HEADER_LENGTH + 4 + key_len + 8;
 	s = transport_send_stream_init(rdp->mcs->transport, length);
-	tpkt_write_header(s, length);
-	tpdu_write_header(s, 2, 0xf0);
-	per_write_choice(s, DomainMCSPDU_SendDataRequest << 2);
-	per_write_integer16(s, rdp->mcs->user_id, MCS_BASE_CHANNEL_ID);
-	per_write_integer16(s, MCS_GLOBAL_CHANNEL_ID, 0);
-	stream_write_uint8(s, 0x70);
-	length = (4 + 4 + key_len + 8) | 0x8000;
-	stream_write_uint16_be(s, length);
-	stream_write_uint32(s, 1); /* SEC_CLIENT_RANDOM */
+	rdp_write_header(rdp, s, length, MCS_GLOBAL_CHANNEL_ID);
+	rdp_write_security_header(s, SEC_EXCHANGE_PKT);
 	length = key_len + 8;
 	stream_write_uint32(s, length);
-	memcpy(s->p, crypt_client_random, length);
-	stream_seek(s, length);
+	stream_write(s, crypt_client_random, length);
 	if (transport_write(rdp->mcs->transport, s) < 0)
 	{
 		return false;
@@ -233,6 +248,75 @@ static boolean rdp_establish_keys(rdpRdp* rdp)
 	}
 
 	rdp->do_crypt = true;
+	if (rdp->settings->salted_checksum)
+		rdp->do_secure_checksum = true;
+
+	if (rdp->settings->encryption_method == ENCRYPTION_METHOD_FIPS)
+	{
+		uint8 fips_ivec[8] = { 0x12, 0x34, 0x56, 0x78, 0x90, 0xAB, 0xCD, 0xEF };
+		rdp->fips_encrypt = crypto_des3_encrypt_init(rdp->fips_encrypt_key, fips_ivec);
+		rdp->fips_decrypt = crypto_des3_decrypt_init(rdp->fips_decrypt_key, fips_ivec);
+
+		rdp->fips_hmac = crypto_hmac_new();
+		return true;
+	}
+
+	rdp->rc4_decrypt_key = crypto_rc4_init(rdp->decrypt_key, rdp->rc4_key_len);
+	rdp->rc4_encrypt_key = crypto_rc4_init(rdp->encrypt_key, rdp->rc4_key_len);
+
+	return true;
+}
+
+static boolean rdp_server_establish_keys(rdpRdp* rdp, STREAM* s)
+{
+	uint8 client_random[64]; /* Should be only 32 after successfull decryption, but on failure might take up to 64 bytes. */
+	uint8 crypt_client_random[256 + 8];
+	uint32 rand_len, key_len;
+	uint16 channel_id, length, sec_flags;
+	uint8* mod;
+	uint8* priv_exp;
+
+	if (rdp->settings->encryption == false)
+	{
+		/* No RDP Security. */
+		return true;
+	}
+
+	if (!rdp_read_header(rdp, s, &length, &channel_id))
+	{
+		printf("rdp_server_establish_keys: invalid RDP header\n");
+		return false;
+	}
+	rdp_read_security_header(s, &sec_flags);
+	if ((sec_flags & SEC_EXCHANGE_PKT) == 0)
+	{
+		printf("rdp_server_establish_keys: missing SEC_EXCHANGE_PKT in security header\n");
+		return false;
+	}
+	stream_read_uint32(s, rand_len);
+	key_len = rdp->settings->server_key->modulus.length;
+	if (rand_len != key_len + 8)
+	{
+		printf("rdp_server_establish_keys: invalid encrypted client random length\n");
+		return false;
+	}
+	memset(crypt_client_random, 0, sizeof(crypt_client_random));
+	stream_read(s, crypt_client_random, rand_len);
+	/* 8 zero bytes of padding */
+	stream_seek(s, 8);
+	mod = rdp->settings->server_key->modulus.data;
+	priv_exp = rdp->settings->server_key->private_exponent.data;
+	crypto_rsa_private_decrypt(crypt_client_random, rand_len - 8, key_len, mod, priv_exp, client_random);
+
+	/* now calculate encrypt / decrypt and update keys */
+	if (!security_establish_keys(client_random, rdp))
+	{
+		return false;
+	}
+
+	rdp->do_crypt = true;
+	if (rdp->settings->salted_checksum)
+		rdp->do_secure_checksum = true;
 
 	if (rdp->settings->encryption_method == ENCRYPTION_METHOD_FIPS)
 	{
@@ -336,7 +420,7 @@ boolean rdp_client_connect_mcs_channel_join_confirm(rdpRdp* rdp, STREAM* s)
 
 	if (rdp->mcs->user_channel_joined && rdp->mcs->global_channel_joined && all_joined)
 	{
-		if (!rdp_establish_keys(rdp))
+		if (!rdp_client_establish_keys(rdp))
 			return false;
 		if (!rdp_send_client_info(rdp))
 			return false;
@@ -379,13 +463,16 @@ boolean rdp_client_connect_demand_active(rdpRdp* rdp, STREAM* s)
 	if (!rdp_recv_demand_active(rdp, s))
 	{
 		stream_set_mark(s, mark);
-		stream_seek(s, RDP_PACKET_HEADER_LENGTH);
+		stream_seek(s, RDP_PACKET_HEADER_MAX_LENGTH);
 
 		if (rdp_recv_out_of_sequence_pdu(rdp, s) != true)
 			return false;
 
 		return true;
 	}
+
+	if (rdp->disconnect)
+		return true;
 
 	if (!rdp_send_confirm_active(rdp))
 		return false;
@@ -423,9 +510,6 @@ boolean rdp_client_connect_finalize(rdpRdp* rdp)
 		return false;
 	if (!rdp_send_client_control_pdu(rdp, CTRLACTION_REQUEST_CONTROL))
 		return false;
-
-	rdp->input->SynchronizeEvent(rdp->input, 0);
-
 	if (!rdp_send_client_persistent_key_list_pdu(rdp))
 		return false;
 	if (!rdp_send_client_font_list_pdu(rdp, FONTLIST_FIRST | FONTLIST_LAST))
@@ -436,20 +520,17 @@ boolean rdp_client_connect_finalize(rdpRdp* rdp)
 
 boolean rdp_server_accept_nego(rdpRdp* rdp, STREAM* s)
 {
-	boolean ret;
+	boolean status;
 
 	transport_set_blocking_mode(rdp->transport, true);
 
 	if (!nego_read_request(rdp->nego, s))
 		return false;
-	if (rdp->nego->requested_protocols == PROTOCOL_RDP)
-	{
-		printf("Standard RDP encryption is not supported.\n");
-		return false;
-	}
+
+	rdp->nego->selected_protocol = 0;
 
 	printf("Requested protocols:");
-	if ((rdp->nego->requested_protocols | PROTOCOL_TLS))
+	if ((rdp->nego->requested_protocols & PROTOCOL_TLS))
 	{
 		printf(" TLS");
 		if (rdp->settings->tls_security)
@@ -460,7 +541,7 @@ boolean rdp_server_accept_nego(rdpRdp* rdp, STREAM* s)
 		else
 			printf("(n)");
 	}
-	if ((rdp->nego->requested_protocols | PROTOCOL_NLA))
+	if ((rdp->nego->requested_protocols & PROTOCOL_NLA))
 	{
 		printf(" NLA");
 		if (rdp->settings->nla_security)
@@ -471,20 +552,28 @@ boolean rdp_server_accept_nego(rdpRdp* rdp, STREAM* s)
 		else
 			printf("(n)");
 	}
+	printf(" RDP");
+	if (rdp->settings->rdp_security && rdp->nego->selected_protocol == 0)
+	{
+		printf("(Y)");
+		rdp->nego->selected_protocol = PROTOCOL_RDP;
+	}
+	else
+		printf("(n)");
 	printf("\n");
 
 	if (!nego_send_negotiation_response(rdp->nego))
 		return false;
 
-	ret = false;
+	status = false;
 	if (rdp->nego->selected_protocol & PROTOCOL_NLA)
-		ret = transport_accept_nla(rdp->transport);
+		status = transport_accept_nla(rdp->transport);
 	else if (rdp->nego->selected_protocol & PROTOCOL_TLS)
-		ret = transport_accept_tls(rdp->transport);
-	else if (rdp->nego->selected_protocol & PROTOCOL_RDP)
-		ret = transport_accept_rdp(rdp->transport);
+		status = transport_accept_tls(rdp->transport);
+	else if (rdp->nego->selected_protocol == PROTOCOL_RDP) /* 0 */
+		status = transport_accept_rdp(rdp->transport);
 
-	if (!ret)
+	if (!status)
 		return false;
 
 	transport_set_blocking_mode(rdp->transport, false);
@@ -572,8 +661,20 @@ boolean rdp_server_accept_mcs_channel_join_request(rdpRdp* rdp, STREAM* s)
 	return true;
 }
 
+boolean rdp_server_accept_client_keys(rdpRdp* rdp, STREAM* s)
+{
+
+	if (!rdp_server_establish_keys(rdp, s))
+		return false;
+
+	rdp->state = CONNECTION_STATE_ESTABLISH_KEYS;
+
+	return true;
+}
+
 boolean rdp_server_accept_client_info(rdpRdp* rdp, STREAM* s)
 {
+
 	if (!rdp_recv_client_info(rdp, s))
 		return false;
 

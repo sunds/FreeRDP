@@ -28,7 +28,7 @@
 # limitations under the License.
 #=============================================================================
 
-find_path(XINERAMA_INCLUDE_DIR NAMES Xinerama.h
+find_path(XINERAMA_INCLUDE_DIR NAMES X11/extensions/Xinerama.h
           PATH_SUFFIXES X11/extensions
           DOC "The Xinerama include directory"
 )
@@ -38,7 +38,7 @@ find_library(XINERAMA_LIBRARY NAMES Xinerama
 )
 
 include(FindPackageHandleStandardArgs)
-FIND_PACKAGE_HANDLE_STANDARD_ARGS(XINERAMA DEFAULT_MSG XINERAMA_LIBRARY XINERAMA_INCLUDE_DIR)
+FIND_PACKAGE_HANDLE_STANDARD_ARGS(Xinerama DEFAULT_MSG XINERAMA_LIBRARY XINERAMA_INCLUDE_DIR)
 
 if(XINERAMA_FOUND)
   set( XINERAMA_LIBRARIES ${XINERAMA_LIBRARY} )

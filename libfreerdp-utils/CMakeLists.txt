@@ -38,7 +38,6 @@ set(FREERDP_UTILS_SRCS
 	rail.c
 	rect.c
 	registry.c
-	certstore.c
 	semaphore.c
 	signal.c
 	sleep.c
@@ -46,11 +45,11 @@ set(FREERDP_UTILS_SRCS
 	stream.c
 	string.c
 	svc_plugin.c
+	tcp.c
 	thread.c
+	time.c
 	unicode.c
 	wait_obj.c)
-
-add_definitions(-DPLUGIN_PATH="${FREERDP_PLUGIN_PATH}")
 
 add_library(freerdp-utils ${FREERDP_UTILS_SRCS})
 

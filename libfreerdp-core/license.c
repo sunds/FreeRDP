@@ -18,6 +18,7 @@
  */
 
 #include "redirection.h"
+#include "certificate.h"
 
 #include "license.h"
 
@@ -111,7 +112,7 @@ STREAM* license_send_stream_init(rdpLicense* license)
 {
 	STREAM* s;
 	s = transport_send_stream_init(license->rdp->transport, 4096);
-	stream_seek(s, LICENSE_PACKET_HEADER_LENGTH);
+	stream_seek(s, LICENSE_PACKET_HEADER_MAX_LENGTH);
 	return s;
 }
 
@@ -135,7 +136,7 @@ boolean license_send(rdpLicense* license, STREAM* s, uint8 type)
 	stream_set_pos(s, 0);
 
 	sec_flags = SEC_LICENSE_PKT;
-	wMsgSize = length - LICENSE_PACKET_HEADER_LENGTH + 4;
+	wMsgSize = length - LICENSE_PACKET_HEADER_MAX_LENGTH + 4;
 	/**
 	 * Using EXTENDED_ERROR_MSG_SUPPORTED here would cause mstsc to crash when
 	 * running in server mode! This flag seems to be incorrectly documented.
@@ -329,7 +330,7 @@ void license_encrypt_premaster_secret(rdpLicense* license)
 	encrypted_premaster_secret = (uint8*) xmalloc(MODULUS_MAX_SIZE);
 	memset(encrypted_premaster_secret, 0, MODULUS_MAX_SIZE);
 
-	crypto_rsa_encrypt(license->premaster_secret, PREMASTER_SECRET_LENGTH,
+	crypto_rsa_public_encrypt(license->premaster_secret, PREMASTER_SECRET_LENGTH,
 			key_length, modulus, exponent, encrypted_premaster_secret);
 
 	license->encrypted_premaster_secret->type = BB_RANDOM_BLOB;
@@ -832,6 +833,7 @@ void license_send_platform_challenge_response_packet(rdpLicense* license)
 	buffer = (uint8*) xmalloc(HWID_LENGTH);
 	rc4 = crypto_rc4_init(license->licensing_encryption_key, LICENSING_ENCRYPTION_KEY_LENGTH);
 	crypto_rc4(rc4, HWID_LENGTH, license->hwid, buffer);
+	crypto_rc4_free(rc4);
 
 #ifdef WITH_DEBUG_LICENSE
 	printf("Licensing Encryption Key:\n");

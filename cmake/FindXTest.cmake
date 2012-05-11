@@ -28,7 +28,7 @@
 # limitations under the License.
 #=============================================================================
 
-find_path(XTEST_INCLUDE_DIR NAMES XTest.h
+find_path(XTEST_INCLUDE_DIR NAMES X11/extensions/XTest.h
           PATH_SUFFIXES X11/extensions
           DOC "The XTest include directory"
 )
@@ -38,7 +38,7 @@ find_library(XTEST_LIBRARY NAMES Xtst
 )
 
 include(FindPackageHandleStandardArgs)
-FIND_PACKAGE_HANDLE_STANDARD_ARGS(XTEST DEFAULT_MSG XTEST_LIBRARY XTEST_INCLUDE_DIR)
+FIND_PACKAGE_HANDLE_STANDARD_ARGS(XTest DEFAULT_MSG XTEST_LIBRARY XTEST_INCLUDE_DIR)
 
 if(XTEST_FOUND)
   set( XTEST_LIBRARIES ${XTEST_LIBRARY} )

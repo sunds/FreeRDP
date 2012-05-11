@@ -21,13 +21,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <freerdp/api.h>
+#include <freerdp/crypto/per.h>
 #include <freerdp/utils/stream.h>
 
 #include "orders.h"
 #include "update.h"
 #include "surface.h"
-
 #include "fastpath.h"
+#include "rdp.h"
 
 /**
  * Fast-Path packet format is defined in [MS-RDPBCGR] 2.2.9.1.2, which revises
@@ -41,18 +42,32 @@
 
 #define FASTPATH_MAX_PACKET_SIZE 0x3FFF
 
+/*
+ * The fastpath header may be two or three bytes long.
+ * This function assumes that at least two bytes are available in the stream
+ * and doesn't touch third byte.
+ */
+uint16 fastpath_header_length(STREAM* s)
+{
+	uint8 length1;
+
+	stream_seek_uint8(s);
+	stream_read_uint8(s, length1);
+	stream_rewind(s, 2);
+
+	return ((length1 & 0x80) != 0 ? 3 : 2);
+}
+
 /**
  * Read a Fast-Path packet header.\n
  * @param s stream
  * @param encryptionFlags
  * @return length
  */
-
 uint16 fastpath_read_header(rdpFastPath* fastpath, STREAM* s)
 {
 	uint8 header;
 	uint16 length;
-	uint8 t;
 
 	stream_read_uint8(s, header);
 
@@ -62,20 +77,12 @@ uint16 fastpath_read_header(rdpFastPath* fastpath, STREAM* s)
 		fastpath->numberEvents = (header & 0x3C) >> 2;
 	}
 
-	stream_read_uint8(s, length); /* length1 */
-	/* If most significant bit is not set, length2 is not presented. */
-	if ((length & 0x80))
-	{
-		length &= 0x7F;
-		length <<= 8;
-		stream_read_uint8(s, t);
-		length += t;
-	}
+	per_read_length(s, &length);
 
 	return length;
 }
 
-INLINE void fastpath_read_update_header(STREAM* s, uint8* updateCode, uint8* fragmentation, uint8* compression)
+static INLINE void fastpath_read_update_header(STREAM* s, uint8* updateCode, uint8* fragmentation, uint8* compression)
 {
 	uint8 updateHeader;
 
@@ -85,7 +92,7 @@ INLINE void fastpath_read_update_header(STREAM* s, uint8* updateCode, uint8* fra
 	*compression = (updateHeader >> 6) & 0x03;
 }
 
-INLINE void fastpath_write_update_header(STREAM* s, uint8 updateCode, uint8 fragmentation, uint8 compression)
+static INLINE void fastpath_write_update_header(STREAM* s, uint8 updateCode, uint8 fragmentation, uint8 compression)
 {
 	uint8 updateHeader = 0;
 
@@ -99,10 +106,7 @@ uint16 fastpath_read_header_rdp(rdpFastPath* fastpath, STREAM* s)
 {
 	uint8 header;
 	uint16 length;
-	uint8 t;
-	uint16 hs;
 
-	hs = 2;
 	stream_read_uint8(s, header);
 
 	if (fastpath != NULL)
@@ -111,21 +115,12 @@ uint16 fastpath_read_header_rdp(rdpFastPath* fastpath, STREAM* s)
 		fastpath->numberEvents = (header & 0x3C) >> 2;
 	}
 
-	stream_read_uint8(s, length); /* length1 */
-	/* If most significant bit is not set, length2 is not presented. */
-	if ((length & 0x80))
-	{
-		hs++;
-		length &= 0x7F;
-		length <<= 8;
-		stream_read_uint8(s, t);
-		length += t;
-	}
+	per_read_length(s, &length);
 
-	return length - hs;
+	return length - stream_get_length(s);
 }
 
-static void fastpath_recv_orders(rdpFastPath* fastpath, STREAM* s)
+static boolean fastpath_recv_orders(rdpFastPath* fastpath, STREAM* s)
 {
 	rdpUpdate* update = fastpath->rdp->update;
 	uint16 numberOrders;
@@ -134,9 +129,12 @@ static void fastpath_recv_orders(rdpFastPath* fastpath, STREAM* s)
 
 	while (numberOrders > 0)
 	{
-		update_recv_order(update, s);
+		if (!update_recv_order(update, s))
+			return false;
 		numberOrders--;
 	}
+
+	return true;
 }
 
 static void fastpath_recv_update_common(rdpFastPath* fastpath, STREAM* s)
@@ -166,7 +164,7 @@ static void fastpath_recv_update_synchronize(rdpFastPath* fastpath, STREAM* s)
 	stream_seek_uint16(s); /* size (2 bytes), must be set to zero */
 }
 
-static void fastpath_recv_update(rdpFastPath* fastpath, uint8 updateCode, uint32 size, STREAM* s)
+static boolean fastpath_recv_update(rdpFastPath* fastpath, uint8 updateCode, uint32 size, STREAM* s)
 {
 	rdpUpdate* update = fastpath->rdp->update;
 	rdpContext* context = fastpath->rdp->update->context;
@@ -175,7 +173,8 @@ static void fastpath_recv_update(rdpFastPath* fastpath, uint8 updateCode, uint32
 	switch (updateCode)
 	{
 		case FASTPATH_UPDATETYPE_ORDERS:
-			fastpath_recv_orders(fastpath, s);
+			if (!fastpath_recv_orders(fastpath, s))
+				return false;
 			break;
 
 		case FASTPATH_UPDATETYPE_BITMAP:
@@ -226,9 +225,11 @@ static void fastpath_recv_update(rdpFastPath* fastpath, uint8 updateCode, uint32
 			DEBUG_WARN("unknown updateCode 0x%X", updateCode);
 			break;
 	}
+
+	return true;
 }
 
-static void fastpath_recv_update_data(rdpFastPath* fastpath, STREAM* s)
+static boolean fastpath_recv_update_data(rdpFastPath* fastpath, STREAM* s)
 {
 	uint16 size;
 	int next_pos;
@@ -258,10 +259,10 @@ static void fastpath_recv_update_data(rdpFastPath* fastpath, STREAM* s)
 
 	if (compressionFlags & PACKET_COMPRESSED)
 	{
-		if (decompress_rdp(rdp, s->p, size, compressionFlags, &roff, &rlen))
+		if (decompress_rdp(rdp->mppc_dec, s->p, size, compressionFlags, &roff, &rlen))
 		{
 			comp_stream = stream_new(0);
-			comp_stream->data = rdp->mppc->history_buf + roff;
+			comp_stream->data = rdp->mppc_dec->history_buf + roff;
 			comp_stream->p = comp_stream->data;
 			comp_stream->size = rlen;
 			size = comp_stream->size;
@@ -296,12 +297,17 @@ static void fastpath_recv_update_data(rdpFastPath* fastpath, STREAM* s)
 	}
 
 	if (update_stream)
-		fastpath_recv_update(fastpath, updateCode, totalSize, update_stream);
+	{
+		if (!fastpath_recv_update(fastpath, updateCode, totalSize, update_stream))
+			return false;
+	}
 
 	stream_set_pos(s, next_pos);
 
 	if (comp_stream != s)
 		xfree(comp_stream);
+
+	return true;
 }
 
 boolean fastpath_recv_updates(rdpFastPath* fastpath, STREAM* s)
@@ -312,7 +318,11 @@ boolean fastpath_recv_updates(rdpFastPath* fastpath, STREAM* s)
 
 	while (stream_get_left(s) >= 3)
 	{
-		fastpath_recv_update_data(fastpath, s);
+		if (!fastpath_recv_update_data(fastpath, s))
+		{
+			/* XXX: Do we need to call EndPaint? */
+			return false;
+		}
 	}
 
 	IFCALL(update->EndPaint, update->context);
@@ -405,13 +415,20 @@ static boolean fastpath_recv_input_event_sync(rdpFastPath* fastpath, STREAM* s, 
 static boolean fastpath_recv_input_event_unicode(rdpFastPath* fastpath, STREAM* s, uint8 eventFlags)
 {
 	uint16 unicodeCode;
+	uint16 flags;
 
 	if (stream_get_left(s) < 2)
 		return false;
 
 	stream_read_uint16(s, unicodeCode); /* unicodeCode (2 bytes) */
 
-	IFCALL(fastpath->rdp->input->UnicodeKeyboardEvent, fastpath->rdp->input, unicodeCode);
+	flags = 0;
+	if ((eventFlags & FASTPATH_INPUT_KBDFLAGS_RELEASE))
+		flags |= KBD_FLAGS_RELEASE;
+	else
+		flags |= KBD_FLAGS_DOWN;
+
+	IFCALL(fastpath->rdp->input->UnicodeKeyboardEvent, fastpath->rdp->input, flags, unicodeCode);
 
 	return true;
 }
@@ -485,30 +502,89 @@ boolean fastpath_recv_inputs(rdpFastPath* fastpath, STREAM* s)
 	return true;
 }
 
+static uint32 fastpath_get_sec_bytes(rdpRdp* rdp)
+{
+	uint32 sec_bytes;
+
+	if (rdp->do_crypt)
+	{
+		sec_bytes = 8;
+		if (rdp->settings->encryption_method == ENCRYPTION_METHOD_FIPS)
+			sec_bytes += 4;
+	}
+	else
+		sec_bytes = 0;
+	return sec_bytes;
+}
+
 STREAM* fastpath_input_pdu_init(rdpFastPath* fastpath, uint8 eventFlags, uint8 eventCode)
 {
+	rdpRdp *rdp;
 	STREAM* s;
-	s = transport_send_stream_init(fastpath->rdp->transport, 127);
-	stream_seek(s, 2); /* fpInputHeader and length1 */
-	/* length2 is not necessary since input PDU should not exceed 127 bytes */
+
+	rdp = fastpath->rdp;
+
+	s = transport_send_stream_init(rdp->transport, 256);
+	stream_seek(s, 3); /* fpInputHeader, length1 and length2 */
+	if (rdp->do_crypt) {
+		rdp->sec_flags |= SEC_ENCRYPT;
+		if (rdp->do_secure_checksum)
+			rdp->sec_flags |= SEC_SECURE_CHECKSUM;
+	}
+	stream_seek(s, fastpath_get_sec_bytes(rdp));
 	stream_write_uint8(s, eventFlags | (eventCode << 5)); /* eventHeader (1 byte) */
 	return s;
 }
 
 boolean fastpath_send_input_pdu(rdpFastPath* fastpath, STREAM* s)
 {
+	rdpRdp *rdp;
 	uint16 length;
+	uint8 eventHeader;
+	int sec_bytes;
+
+	rdp = fastpath->rdp;
 
 	length = stream_get_length(s);
-	if (length > 127)
+	if (length >= (2 << 14))
 	{
-		printf("Maximum FastPath PDU length is 127\n");
+		printf("Maximum FastPath PDU length is 32767\n");
 		return false;
 	}
 
+	eventHeader = FASTPATH_INPUT_ACTION_FASTPATH;
+	eventHeader |= (1 << 2); /* numberEvents */
+	if (rdp->sec_flags & SEC_ENCRYPT)
+		eventHeader |= (FASTPATH_INPUT_ENCRYPTED << 6);
+	if (rdp->sec_flags & SEC_SECURE_CHECKSUM)
+		eventHeader |= (FASTPATH_INPUT_SECURE_CHECKSUM << 6);
+
 	stream_set_pos(s, 0);
-	stream_write_uint8(s, (1 << 2));
-	stream_write_uint8(s, length);
+	stream_write_uint8(s, eventHeader);
+	sec_bytes = fastpath_get_sec_bytes(fastpath->rdp);
+	/*
+	 * We always encode length in two bytes, eventhough we could use
+	 * only one byte if length <= 0x7F. It is just easier that way,
+	 * because we can leave room for fixed-length header, store all
+	 * the data first and then store the header.
+	 */
+	stream_write_uint16_be(s, 0x8000 | length);
+
+	if (sec_bytes > 0)
+	{
+		uint8* fpInputEvents;
+		uint16 fpInputEvents_length;
+
+		fpInputEvents = stream_get_tail(s) + sec_bytes;
+		fpInputEvents_length = length - 3 - sec_bytes;
+		if (rdp->sec_flags & SEC_SECURE_CHECKSUM)
+			security_salted_mac_signature(rdp, fpInputEvents, fpInputEvents_length, true, stream_get_tail(s));
+		else
+			security_mac_signature(rdp, fpInputEvents, fpInputEvents_length, stream_get_tail(s));
+		security_encrypt(fpInputEvents, fpInputEvents_length, rdp);
+	}
+
+	rdp->sec_flags = 0;
 
 	stream_set_pos(s, length);
 	if (transport_write(fastpath->rdp->transport, s) < 0)
@@ -522,62 +598,136 @@ STREAM* fastpath_update_pdu_init(rdpFastPath* fastpath)
 	STREAM* s;
 	s = transport_send_stream_init(fastpath->rdp->transport, FASTPATH_MAX_PACKET_SIZE);
 	stream_seek(s, 3); /* fpOutputHeader, length1 and length2 */
+	stream_seek(s, fastpath_get_sec_bytes(fastpath->rdp));
 	stream_seek(s, 3); /* updateHeader, size */
 	return s;
 }
 
 boolean fastpath_send_update_pdu(rdpFastPath* fastpath, uint8 updateCode, STREAM* s)
 {
+	rdpRdp* rdp;
 	uint8* bm;
+	uint8* ptr_to_crypt;
+	uint8* ptr_sig;
+	uint8* holdp;
 	int fragment;
-	uint16 length;
+	int sec_bytes;
+	int try_comp;
+	int comp_flags;
+	int header_bytes;
+	int cflags;
+	int pdu_data_bytes;
+	int dlen;
+	int bytes_to_crypt;
 	boolean result;
 	uint16 pduLength;
 	uint16 maxLength;
 	uint32 totalLength;
 	uint8 fragmentation;
+	uint8 header;
 	STREAM* update;
+	STREAM* comp_update;
+	STREAM* ls;
 
 	result = true;
-
-	maxLength = FASTPATH_MAX_PACKET_SIZE - 6;
-	totalLength = stream_get_length(s) - 6;
+	rdp = fastpath->rdp;
+	sec_bytes = fastpath_get_sec_bytes(rdp);
+	maxLength = FASTPATH_MAX_PACKET_SIZE - (6 + sec_bytes);
+	totalLength = stream_get_length(s) - (6 + sec_bytes);
 	stream_set_pos(s, 0);
 	update = stream_new(0);
+	try_comp = rdp->settings->compression;
+	comp_update = stream_new(0);
 
-	for (fragment = 0; totalLength > 0; fragment++)
+	for (fragment = 0; totalLength > 0 || fragment == 0; fragment++)
 	{
-		length = MIN(maxLength, totalLength);
-		totalLength -= length;
-		pduLength = length + 6;
+		stream_get_mark(s, holdp);
+		ls = s;
+		dlen = MIN(maxLength, totalLength);
+		cflags = 0;
+		comp_flags = 0;
+		header_bytes = 6 + sec_bytes;
+		pdu_data_bytes = dlen;
+		if (try_comp)
+		{
+			if (compress_rdp(rdp->mppc_enc, ls->p + header_bytes, dlen))
+			{
+				if (rdp->mppc_enc->flags & PACKET_COMPRESSED)
+				{
+					cflags = rdp->mppc_enc->flags;
+					pdu_data_bytes = rdp->mppc_enc->bytes_in_opb;
+					comp_flags = FASTPATH_OUTPUT_COMPRESSION_USED;
+					header_bytes = 7 + sec_bytes;
+					bm = (uint8*) (rdp->mppc_enc->outputBuffer - header_bytes);
+					stream_attach(comp_update, bm, pdu_data_bytes + header_bytes);
+					ls = comp_update;
+				}
+			}
+			else
+				printf("fastpath_send_update_pdu: mppc_encode failed\n");
+		}
+
+		totalLength -= dlen;
+		pduLength = pdu_data_bytes + header_bytes;
 
 		if (totalLength == 0)
 			fragmentation = (fragment == 0) ? FASTPATH_FRAGMENT_SINGLE : FASTPATH_FRAGMENT_LAST;
 		else
 			fragmentation = (fragment == 0) ? FASTPATH_FRAGMENT_FIRST : FASTPATH_FRAGMENT_NEXT;
 
-		stream_get_mark(s, bm);
-		stream_write_uint8(s, 0); /* fpOutputHeader (1 byte) */
-		stream_write_uint8(s, 0x80 | (pduLength >> 8)); /* length1 */
-		stream_write_uint8(s, pduLength & 0xFF); /* length2 */
-		fastpath_write_update_header(s, updateCode, fragmentation, 0);
-		stream_write_uint16(s, length);
+		stream_get_mark(ls, bm);
+		header = 0;
+		if (sec_bytes > 0)
+			header |= (FASTPATH_OUTPUT_ENCRYPTED << 6);
+		stream_write_uint8(ls, header); /* fpOutputHeader (1 byte) */
+		stream_write_uint8(ls, 0x80 | (pduLength >> 8)); /* length1 */
+		stream_write_uint8(ls, pduLength & 0xFF); /* length2 */
+
+		if (sec_bytes > 0)
+			stream_seek(ls, sec_bytes);
+
+		fastpath_write_update_header(ls, updateCode, fragmentation, comp_flags);
+
+		/* extra byte if compressed */
+		if (ls == comp_update)
+		{
+			stream_write_uint8(ls, cflags);
+			bytes_to_crypt = pdu_data_bytes + 4;
+		}
+		else
+			bytes_to_crypt = pdu_data_bytes + 3;
+
+		stream_write_uint16(ls, pdu_data_bytes);
 
 		stream_attach(update, bm, pduLength);
 		stream_seek(update, pduLength);
+
+		if (sec_bytes > 0)
+		{
+			/* does this work ? */
+			ptr_to_crypt = bm + 3 + sec_bytes;
+			ptr_sig = bm + 3;
+			if (rdp->sec_flags & SEC_SECURE_CHECKSUM)
+				security_salted_mac_signature(rdp, ptr_to_crypt, bytes_to_crypt, true, ptr_sig);
+			else
+				security_mac_signature(rdp, ptr_to_crypt, bytes_to_crypt, ptr_sig);
+			security_encrypt(ptr_to_crypt, bytes_to_crypt, rdp);
+		}
+
 		if (transport_write(fastpath->rdp->transport, update) < 0)
 		{
-			stream_detach(update);
 			result = false;
 			break;
 		}
-		stream_detach(update);
 
-		/* Reserve 6 bytes for the next fragment header, if any. */
-		stream_seek(s, length - 6);
+		/* Reserve 6 + sec_bytes bytes for the next fragment header, if any. */
+		stream_set_mark(s, holdp + dlen);
 	}
 
+	stream_detach(update);
+	stream_detach(comp_update);
 	stream_free(update);
+	stream_free(comp_update);
 
 	return result;
 }

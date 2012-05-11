@@ -19,10 +19,13 @@
  * limitations under the License.
  */
 
+#include <winpr/windows.h>
+
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <tchar.h>
 #include <sys/types.h>
 
 #ifdef _MSC_VER
@@ -168,6 +171,8 @@ boolean wf_pre_connect(freerdp* instance)
 	settings->order_support[NEG_ELLIPSE_SC_INDEX] = false;
 	settings->order_support[NEG_ELLIPSE_CB_INDEX] = false;
 
+	settings->glyph_cache = false;
+
 	wfi->cursor = g_default_cursor;
 
 	wfi->fullscreen = settings->fullscreen;
@@ -175,8 +180,8 @@ boolean wf_pre_connect(freerdp* instance)
 	wfi->sw_gdi = settings->sw_gdi;
 
 	wfi->clrconv = (HCLRCONV) xzalloc(sizeof(CLRCONV));
-	wfi->clrconv->alpha = 1;
 	wfi->clrconv->palette = NULL;
+	wfi->clrconv->alpha = false;
 
 	instance->context->cache = cache_new(settings);
 
@@ -304,7 +309,7 @@ boolean wf_post_connect(freerdp* instance)
 
 		if (settings->rfx_codec)
 		{
-			wfi->tile = wf_bitmap_new(wfi, 64, 64, 24, NULL);
+			wfi->tile = wf_bitmap_new(wfi, 64, 64, 32, NULL);
 			wfi->rfx_context = rfx_context_new();
 			rfx_context_set_cpu_opt(wfi->rfx_context, wfi_detect_cpu());
 		}
@@ -316,9 +321,9 @@ boolean wf_post_connect(freerdp* instance)
 	if (settings->window_title != NULL)
 		_snwprintf(win_title, sizeof(win_title), L"%S", settings->window_title);
 	else if (settings->port == 3389)
-		_snwprintf(win_title, sizeof(win_title) / sizeof(win_title[0]), L"FreeRDP: %S", settings->hostname);
+		_snwprintf(win_title, ARRAY_SIZE(win_title), L"FreeRDP: %S", settings->hostname);
 	else
-		_snwprintf(win_title, sizeof(win_title) / sizeof(win_title[0]), L"FreeRDP: %S:%d", settings->hostname, settings->port);
+		_snwprintf(win_title, ARRAY_SIZE(win_title), L"FreeRDP: %S:%d", settings->hostname, settings->port);
 
 	if (wfi->hwnd == 0)
 	{
@@ -383,6 +388,32 @@ boolean wf_post_connect(freerdp* instance)
 
 boolean wf_verify_certificate(freerdp* instance, char* subject, char* issuer, char* fingerprint)
 {
+#if 0
+	DWORD mode;
+	int read_size;
+	DWORD read_count;
+	TCHAR answer[2];
+	TCHAR* read_buffer;
+	HANDLE input_handle;
+#endif
+
+	printf("Certificate details:\n");
+	printf("\tSubject: %s\n", subject);
+	printf("\tIssuer: %s\n", issuer);
+	printf("\tThumbprint: %s\n", fingerprint);
+	printf("The above X.509 certificate could not be verified, possibly because you do not have "
+		"the CA certificate in your certificate store, or the certificate has expired. "
+		"Please look at the documentation on how to create local certificate store for a private CA.\n");
+
+	/* TODO: ask for user validation */
+#if 0
+	input_handle = GetStdHandle(STD_INPUT_HANDLE);
+
+	GetConsoleMode(input_handle, &mode);
+	mode |= ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT;
+	SetConsoleMode(input_handle, mode);
+#endif
+
 	return true;
 }
 
@@ -570,7 +601,7 @@ static DWORD WINAPI kbd_thread_func(LPVOID lpParam)
 
 	if (hook_handle)
 	{
-		while( (status = GetMessage( &msg, NULL, 0, 0 )) != 0)
+		while ((status = GetMessage( &msg, NULL, 0, 0 )) != 0)
 		{
 			if (status == -1)
 			{
@@ -653,11 +684,24 @@ INT WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
 	//while (1)
 	{
+		int arg_parse_result;
+
 		data = (thread_data*) xzalloc(sizeof(thread_data)); 
 		data->instance = instance;
 
-		freerdp_parse_args(instance->settings, __argc, __argv,
+		arg_parse_result = freerdp_parse_args(instance->settings, __argc, __argv,
 			wf_process_plugin_args, instance->context->channels, wf_process_client_args, NULL);
+
+		if (arg_parse_result < 0)
+		{
+			if (arg_parse_result == FREERDP_ARGS_PARSE_FAILURE)
+				printf("failed to parse arguments.\n");
+
+#ifdef _DEBUG
+			system("pause");
+#endif
+			exit(-1);
+		}
 
 		if (CreateThread(NULL, 0, thread_func, data, 0, NULL) != 0)
 			g_thread_count++;

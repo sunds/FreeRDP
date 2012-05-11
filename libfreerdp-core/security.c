@@ -118,7 +118,7 @@ static void security_salted_hash(uint8* salt, uint8* input, int length, uint8* s
 {
 	CryptoMd5 md5;
 	CryptoSha1 sha1;
-	uint8 sha1_digest[20];
+	uint8 sha1_digest[CRYPTO_SHA1_DIGEST_LENGTH];
 
 	/* SaltedHash(Salt, Input, Salt1, Salt2) = MD5(S + SHA1(Input + Salt + Salt1 + Salt2)) */
 
@@ -133,7 +133,7 @@ static void security_salted_hash(uint8* salt, uint8* input, int length, uint8* s
 	/* SaltedHash(Salt, Input, Salt1, Salt2) = MD5(S + SHA1_Digest) */
 	md5 = crypto_md5_init();
 	crypto_md5_update(md5, salt, 48); /* Salt (48 bytes) */
-	crypto_md5_update(md5, sha1_digest, 20); /* SHA1_Digest */
+	crypto_md5_update(md5, sha1_digest, sizeof(sha1_digest)); /* SHA1_Digest */
 	crypto_md5_final(md5, output);
 }
 
@@ -201,7 +201,7 @@ void security_mac_data(uint8* mac_salt_key, uint8* data, uint32 length, uint8* o
 	CryptoMd5 md5;
 	CryptoSha1 sha1;
 	uint8 length_le[4];
-	uint8 sha1_digest[20];
+	uint8 sha1_digest[CRYPTO_SHA1_DIGEST_LENGTH];
 
 	/* MacData = MD5(MacSaltKey + pad2 + SHA1(MacSaltKey + pad1 + length + data)) */
 
@@ -219,23 +219,23 @@ void security_mac_data(uint8* mac_salt_key, uint8* data, uint32 length, uint8* o
 	md5 = crypto_md5_init();
 	crypto_md5_update(md5, mac_salt_key, 16); /* MacSaltKey */
 	crypto_md5_update(md5, pad2, sizeof(pad2)); /* pad2 */
-	crypto_md5_update(md5, sha1_digest, 20); /* SHA1_Digest */
+	crypto_md5_update(md5, sha1_digest, sizeof(sha1_digest)); /* SHA1_Digest */
 	crypto_md5_final(md5, output);
 }
 
-void security_mac_signature(uint8* mac_key, int mac_key_length, uint8* data, uint32 length, uint8* output)
+void security_mac_signature(rdpRdp *rdp, uint8* data, uint32 length, uint8* output)
 {
 	CryptoMd5 md5;
 	CryptoSha1 sha1;
 	uint8 length_le[4];
-	uint8 md5_digest[16];
-	uint8 sha1_digest[20];
+	uint8 md5_digest[CRYPTO_MD5_DIGEST_LENGTH];
+	uint8 sha1_digest[CRYPTO_SHA1_DIGEST_LENGTH];
 
 	security_uint32_le(length_le, length); /* length must be little-endian */
 
 	/* SHA1_Digest = SHA1(MACKeyN + pad1 + length + data) */
 	sha1 = crypto_sha1_init();
-	crypto_sha1_update(sha1, mac_key, mac_key_length); /* MacKeyN */
+	crypto_sha1_update(sha1, rdp->sign_key, rdp->rc4_key_len); /* MacKeyN */
 	crypto_sha1_update(sha1, pad1, sizeof(pad1)); /* pad1 */
 	crypto_sha1_update(sha1, length_le, sizeof(length_le)); /* length */
 	crypto_sha1_update(sha1, data, length); /* data */
@@ -243,9 +243,52 @@ void security_mac_signature(uint8* mac_key, int mac_key_length, uint8* data, uin
 
 	/* MACSignature = First64Bits(MD5(MACKeyN + pad2 + SHA1_Digest)) */
 	md5 = crypto_md5_init();
-	crypto_md5_update(md5, mac_key, mac_key_length); /* MacKeyN */
+	crypto_md5_update(md5, rdp->sign_key, rdp->rc4_key_len); /* MacKeyN */
 	crypto_md5_update(md5, pad2, sizeof(pad2)); /* pad2 */
-	crypto_md5_update(md5, sha1_digest, 20); /* SHA1_Digest */
+	crypto_md5_update(md5, sha1_digest, sizeof(sha1_digest)); /* SHA1_Digest */
+	crypto_md5_final(md5, md5_digest);
+
+	memcpy(output, md5_digest, 8);
+}
+
+void security_salted_mac_signature(rdpRdp *rdp, uint8* data, uint32 length, boolean encryption, uint8* output)
+{
+	CryptoMd5 md5;
+	CryptoSha1 sha1;
+	uint8 length_le[4];
+	uint8 use_count_le[4];
+	uint8 md5_digest[CRYPTO_MD5_DIGEST_LENGTH];
+	uint8 sha1_digest[CRYPTO_SHA1_DIGEST_LENGTH];
+
+	security_uint32_le(length_le, length); /* length must be little-endian */
+	if (encryption)
+	{
+		security_uint32_le(use_count_le, rdp->encrypt_checksum_use_count);
+	}
+	else
+	{
+		/*
+		 * We calculate checksum on plain text, so we must have already
+		 * decrypt it, which means decrypt_checksum_use_count is
+		 * off by one.
+		 */
+		security_uint32_le(use_count_le, rdp->decrypt_checksum_use_count - 1);
+	}
+
+	/* SHA1_Digest = SHA1(MACKeyN + pad1 + length + data) */
+	sha1 = crypto_sha1_init();
+	crypto_sha1_update(sha1, rdp->sign_key, rdp->rc4_key_len); /* MacKeyN */
+	crypto_sha1_update(sha1, pad1, sizeof(pad1)); /* pad1 */
+	crypto_sha1_update(sha1, length_le, sizeof(length_le)); /* length */
+	crypto_sha1_update(sha1, data, length); /* data */
+	crypto_sha1_update(sha1, use_count_le, sizeof(use_count_le)); /* encryptionCount */
+	crypto_sha1_final(sha1, sha1_digest);
+
+	/* MACSignature = First64Bits(MD5(MACKeyN + pad2 + SHA1_Digest)) */
+	md5 = crypto_md5_init();
+	crypto_md5_update(md5, rdp->sign_key, rdp->rc4_key_len); /* MacKeyN */
+	crypto_md5_update(md5, pad2, sizeof(pad2)); /* pad2 */
+	crypto_md5_update(md5, sha1_digest, sizeof(sha1_digest)); /* SHA1_Digest */
 	crypto_md5_final(md5, md5_digest);
 
 	memcpy(output, md5_digest, 8);
@@ -308,14 +351,18 @@ boolean security_establish_keys(uint8* client_random, rdpRdp* rdp)
 	rdpSettings* settings;
 
 	settings = rdp->settings;
-	server_random = settings->server_random.data;
+	server_random = settings->server_random->data;
 
 	if (settings->encryption_method == ENCRYPTION_METHOD_FIPS)
 	{
 		CryptoSha1 sha1;
-		uint8 client_encrypt_key_t[21], client_decrypt_key_t[21];
+		uint8 client_encrypt_key_t[CRYPTO_SHA1_DIGEST_LENGTH + 1];
+		uint8 client_decrypt_key_t[CRYPTO_SHA1_DIGEST_LENGTH + 1];
 
 		printf("FIPS Compliant encryption level.\n");
+
+		/* disable fastpath input; it doesnt handle FIPS encryption yet */
+		rdp->settings->fastpath_input = false;
 
 		sha1 = crypto_sha1_init();
 		crypto_sha1_update(sha1, client_random + 16, 16);
@@ -347,8 +394,17 @@ boolean security_establish_keys(uint8* client_random, rdpRdp* rdp)
 
 	memcpy(rdp->sign_key, session_key_blob, 16);
 
-	security_md5_16_32_32(&session_key_blob[16], client_random, server_random, rdp->decrypt_key);
-	security_md5_16_32_32(&session_key_blob[32], client_random, server_random, rdp->encrypt_key);
+	if (rdp->settings->server_mode) {
+		security_md5_16_32_32(&session_key_blob[16], client_random,
+		    server_random, rdp->encrypt_key);
+		security_md5_16_32_32(&session_key_blob[32], client_random,
+		    server_random, rdp->decrypt_key);
+	} else {
+		security_md5_16_32_32(&session_key_blob[16], client_random,
+		    server_random, rdp->decrypt_key);
+		security_md5_16_32_32(&session_key_blob[32], client_random,
+		    server_random, rdp->encrypt_key);
+	}
 
 	if (settings->encryption_method == 1) /* 40 and 56 bit */
 	{
@@ -364,13 +420,17 @@ boolean security_establish_keys(uint8* client_random, rdpRdp* rdp)
 
 	memcpy(rdp->decrypt_update_key, rdp->decrypt_key, 16);
 	memcpy(rdp->encrypt_update_key, rdp->encrypt_key, 16);
+	rdp->decrypt_use_count = 0;
+	rdp->decrypt_checksum_use_count = 0;
+	rdp->encrypt_use_count =0;
+	rdp->encrypt_checksum_use_count =0;
 
 	return true;
 }
 
 boolean security_key_update(uint8* key, uint8* update_key, int key_len)
 {
-	uint8 sha1h[20];
+	uint8 sha1h[CRYPTO_SHA1_DIGEST_LENGTH];
 	CryptoMd5 md5;
 	CryptoSha1 sha1;
 	CryptoRc4 rc4;
@@ -385,7 +445,7 @@ boolean security_key_update(uint8* key, uint8* update_key, int key_len)
 	md5 = crypto_md5_init();
 	crypto_md5_update(md5, update_key, key_len);
 	crypto_md5_update(md5, pad2, sizeof(pad2));
-	crypto_md5_update(md5, sha1h, 20);
+	crypto_md5_update(md5, sha1h, sizeof(sha1h));
 	crypto_md5_final(md5, key);
 
 	rc4 = crypto_rc4_init(key, key_len);
@@ -408,7 +468,8 @@ boolean security_encrypt(uint8* data, int length, rdpRdp* rdp)
 		rdp->encrypt_use_count = 0;
 	}
 	crypto_rc4(rdp->rc4_encrypt_key, length, data, data);
-	rdp->encrypt_use_count += 1;
+	rdp->encrypt_use_count++;
+	rdp->encrypt_checksum_use_count++;
 	return true;
 }
 
@@ -423,6 +484,7 @@ boolean security_decrypt(uint8* data, int length, rdpRdp* rdp)
 	}
 	crypto_rc4(rdp->rc4_decrypt_key, length, data, data);
 	rdp->decrypt_use_count += 1;
+	rdp->decrypt_checksum_use_count++;
 	return true;
 }
 

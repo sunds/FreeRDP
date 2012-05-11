@@ -28,7 +28,7 @@
 # limitations under the License.
 #=============================================================================
 
-find_path(XCURSOR_INCLUDE_DIR NAMES Xcursor.h
+find_path(XCURSOR_INCLUDE_DIR NAMES X11/Xcursor/Xcursor.h
           PATH_SUFFIXES X11/Xcursor
           DOC "The Xcursor include directory"
 )
@@ -38,7 +38,7 @@ find_library(XCURSOR_LIBRARY NAMES Xcursor
 )
 
 include(FindPackageHandleStandardArgs)
-FIND_PACKAGE_HANDLE_STANDARD_ARGS(XCURSOR DEFAULT_MSG XCURSOR_LIBRARY XCURSOR_INCLUDE_DIR)
+FIND_PACKAGE_HANDLE_STANDARD_ARGS(Xcursor DEFAULT_MSG XCURSOR_LIBRARY XCURSOR_INCLUDE_DIR)
 
 if(XCURSOR_FOUND)
   set( XCURSOR_LIBRARIES ${XCURSOR_LIBRARY} )

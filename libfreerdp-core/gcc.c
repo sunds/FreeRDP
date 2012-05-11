@@ -301,7 +301,7 @@ void gcc_write_conference_create_response(STREAM* s, STREAM* user_data)
 	per_write_octet_string(s, user_data->data, stream_get_length(user_data), 0); /* array of server data blocks */
 }
 
-boolean gcc_read_client_data_blocks(STREAM* s, rdpSettings *settings, int length)
+boolean gcc_read_client_data_blocks(STREAM* s, rdpSettings* settings, int length)
 {
 	uint16 type;
 	uint16 blockLength;
@@ -407,6 +407,7 @@ boolean gcc_read_server_data_blocks(STREAM* s, rdpSettings* settings, int length
 				break;
 
 			default:
+				printf("gcc_read_server_data_blocks: ignoring type=%hu\n", type);
 				break;
 		}
 		offset += blockLength;
@@ -416,7 +417,7 @@ boolean gcc_read_server_data_blocks(STREAM* s, rdpSettings* settings, int length
 	return true;
 }
 
-void gcc_write_server_data_blocks(STREAM* s, rdpSettings *settings)
+void gcc_write_server_data_blocks(STREAM* s, rdpSettings* settings)
 {
 	gcc_write_server_core_data(s, settings);
 	gcc_write_server_network_data(s, settings);
@@ -427,6 +428,9 @@ boolean gcc_read_user_data_header(STREAM* s, uint16* type, uint16* length)
 {
 	stream_read_uint16(s, *type); /* type */
 	stream_read_uint16(s, *length); /* length */
+
+	if (*length < 4)
+		return false;
 
 	if (stream_get_left(s) < *length - 4)
 		return false;
@@ -455,16 +459,17 @@ void gcc_write_user_data_header(STREAM* s, uint16 type, uint16 length)
  * @param settings rdp settings
  */
 
-boolean gcc_read_client_core_data(STREAM* s, rdpSettings *settings, uint16 blockLength)
+boolean gcc_read_client_core_data(STREAM* s, rdpSettings* settings, uint16 blockLength)
 {
+	char* str;
 	uint32 version;
+	uint32 color_depth;
 	uint16 colorDepth = 0;
 	uint16 postBeta2ColorDepth = 0;
 	uint16 highColorDepth = 0;
 	uint16 supportedColorDepths = 0;
 	uint16 earlyCapabilityFlags = 0;
 	uint32 serverSelectedProtocol = 0;
-	char* str;
 
 	/* Length of all required fields, until imeFileName */
 	if (blockLength < 128)
@@ -479,7 +484,7 @@ boolean gcc_read_client_core_data(STREAM* s, rdpSettings *settings, uint16 block
 	stream_seek_uint16(s); /* SASSequence (Secure Access Sequence) */
 	stream_read_uint32(s, settings->kbd_layout); /* keyboardLayout */
 	stream_read_uint32(s, settings->client_build); /* clientBuild */
-	
+
 	/* clientName (32 bytes, null-terminated unicode, truncated to 15 characters) */
 	str = freerdp_uniconv_in(settings->uniconv, stream_get_tail(s), 32);
 	stream_seek(s, 32);
@@ -561,25 +566,25 @@ boolean gcc_read_client_core_data(STREAM* s, rdpSettings *settings, uint16 block
 	} while (0);
 
 	if (highColorDepth > 0)
-		settings->color_depth = highColorDepth;
+		color_depth = highColorDepth;
 	else if (postBeta2ColorDepth > 0)
 	{
 		switch (postBeta2ColorDepth)
 		{
 			case RNS_UD_COLOR_4BPP:
-				settings->color_depth = 4;
+				color_depth = 4;
 				break;
 			case RNS_UD_COLOR_8BPP:
-				settings->color_depth = 8;
+				color_depth = 8;
 				break;
 			case RNS_UD_COLOR_16BPP_555:
-				settings->color_depth = 15;
+				color_depth = 15;
 				break;
 			case RNS_UD_COLOR_16BPP_565:
-				settings->color_depth = 16;
+				color_depth = 16;
 				break;
 			case RNS_UD_COLOR_24BPP:
-				settings->color_depth = 24;
+				color_depth = 24;
 				break;
 			default:
 				return false;
@@ -590,15 +595,22 @@ boolean gcc_read_client_core_data(STREAM* s, rdpSettings *settings, uint16 block
 		switch (colorDepth)
 		{
 			case RNS_UD_COLOR_4BPP:
-				settings->color_depth = 4;
+				color_depth = 4;
 				break;
 			case RNS_UD_COLOR_8BPP:
-				settings->color_depth = 8;
+				color_depth = 8;
 				break;
 			default:
 				return false;
 		}
 	}
+
+	/*
+	 * If we are in server mode, accepth client's color depth only if
+	 * it is smaller than ours. This is what Windows server does.
+	 */
+	if (color_depth < settings->color_depth || !settings->server_mode)
+		settings->color_depth = color_depth;
 
 	return true;
 }
@@ -610,7 +622,7 @@ boolean gcc_read_client_core_data(STREAM* s, rdpSettings *settings, uint16 block
  * @param settings rdp settings
  */
 
-void gcc_write_client_core_data(STREAM* s, rdpSettings *settings)
+void gcc_write_client_core_data(STREAM* s, rdpSettings* settings)
 {
 	uint32 version;
 	char* clientName;
@@ -701,7 +713,7 @@ void gcc_write_client_core_data(STREAM* s, rdpSettings *settings)
 	stream_write_uint32(s, settings->selected_protocol); /* serverSelectedProtocol */
 }
 
-boolean gcc_read_server_core_data(STREAM* s, rdpSettings *settings)
+boolean gcc_read_server_core_data(STREAM* s, rdpSettings* settings)
 {
 	uint32 version;
 	uint32 clientRequestedProtocols;
@@ -717,7 +729,7 @@ boolean gcc_read_server_core_data(STREAM* s, rdpSettings *settings)
 	return true;
 }
 
-void gcc_write_server_core_data(STREAM* s, rdpSettings *settings)
+void gcc_write_server_core_data(STREAM* s, rdpSettings* settings)
 {
 	gcc_write_user_data_header(s, SC_CORE, 12);
 
@@ -732,15 +744,21 @@ void gcc_write_server_core_data(STREAM* s, rdpSettings *settings)
  * @param settings rdp settings
  */
 
-boolean gcc_read_client_security_data(STREAM* s, rdpSettings *settings, uint16 blockLength)
+boolean gcc_read_client_security_data(STREAM* s, rdpSettings* settings, uint16 blockLength)
 {
 	if (blockLength < 8)
 		return false;
 
-	stream_read_uint32(s, settings->encryption_method); /* encryptionMethods */
-	if (settings->encryption_method == 0)
-		stream_read_uint32(s, settings->encryption_method); /* extEncryptionMethods */
-
+	if (settings->encryption)
+	{
+		stream_read_uint32(s, settings->encryption_method); /* encryptionMethods */
+		if (settings->encryption_method == 0)
+			stream_read_uint32(s, settings->encryption_method); /* extEncryptionMethods */
+	}
+	else
+	{
+		stream_seek(s, 8);
+	}
 	return true;
 }
 
@@ -751,7 +769,7 @@ boolean gcc_read_client_security_data(STREAM* s, rdpSettings *settings, uint16 b
  * @param settings rdp settings
  */
 
-void gcc_write_client_security_data(STREAM* s, rdpSettings *settings)
+void gcc_write_client_security_data(STREAM* s, rdpSettings* settings)
 {
 	gcc_write_user_data_header(s, CS_SECURITY, 12);
 
@@ -768,12 +786,12 @@ void gcc_write_client_security_data(STREAM* s, rdpSettings *settings)
 	}
 }
 
-boolean gcc_read_server_security_data(STREAM* s, rdpSettings *settings)
+boolean gcc_read_server_security_data(STREAM* s, rdpSettings* settings)
 {
+	uint8* data;
+	uint32 length;
 	uint32 serverRandomLen;
 	uint32 serverCertLen;
-	uint8* data;
-	uint32 len;
 
 	stream_read_uint32(s, settings->encryption_method); /* encryptionMethod */
 	stream_read_uint32(s, settings->encryption_level); /* encryptionLevel */
@@ -793,9 +811,8 @@ boolean gcc_read_server_security_data(STREAM* s, rdpSettings *settings)
 	if (serverRandomLen > 0)
 	{
 		/* serverRandom */
-		freerdp_blob_alloc(&settings->server_random, serverRandomLen);
-		memcpy(settings->server_random.data, s->p, serverRandomLen);
-		stream_seek(s, serverRandomLen);
+		freerdp_blob_alloc(settings->server_random, serverRandomLen);
+		stream_read(s, settings->server_random->data, serverRandomLen);
 	}
 	else
 	{
@@ -805,17 +822,15 @@ boolean gcc_read_server_security_data(STREAM* s, rdpSettings *settings)
 	if (serverCertLen > 0)
 	{
 		/* serverCertificate */
-		freerdp_blob_alloc(&settings->server_certificate, serverCertLen);
-		memcpy(settings->server_certificate.data, s->p, serverCertLen);
-		stream_seek(s, serverCertLen);
+		freerdp_blob_alloc(settings->server_certificate, serverCertLen);
+		stream_read(s, settings->server_certificate->data, serverCertLen);
 		certificate_free(settings->server_cert);
 		settings->server_cert = certificate_new();
-		data = settings->server_certificate.data;
-		len = settings->server_certificate.length;
-		if (!certificate_read_server_certificate(settings->server_cert, data, len))
-		{
+		data = settings->server_certificate->data;
+		length = settings->server_certificate->length;
+
+		if (!certificate_read_server_certificate(settings->server_cert, data, length))
 			return false;
-		}
 	}
 	else
 	{
@@ -825,16 +840,171 @@ boolean gcc_read_server_security_data(STREAM* s, rdpSettings *settings)
 	return true;
 }
 
-void gcc_write_server_security_data(STREAM* s, rdpSettings *settings)
+static const uint8 initial_signature[] =
 {
-	gcc_write_user_data_header(s, SC_SECURITY, 12);
+	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+	0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01
+};
 
-	stream_write_uint32(s, ENCRYPTION_METHOD_NONE); /* encryptionMethod */
-	stream_write_uint32(s, ENCRYPTION_LEVEL_NONE); /* encryptionLevel */
-#if 0
-	stream_write_uint32(s, 0); /* serverRandomLen */
-	stream_write_uint32(s, 0); /* serverCertLen */
-#endif
+/*
+ * Terminal Services Signing Keys.
+ * Yes, Terminal Services Private Key is publicly available.
+ */
+
+const uint8 tssk_modulus[] =
+{
+	0x3d, 0x3a, 0x5e, 0xbd, 0x72, 0x43, 0x3e, 0xc9,
+	0x4d, 0xbb, 0xc1, 0x1e, 0x4a, 0xba, 0x5f, 0xcb,
+	0x3e, 0x88, 0x20, 0x87, 0xef, 0xf5, 0xc1, 0xe2,
+	0xd7, 0xb7, 0x6b, 0x9a, 0xf2, 0x52, 0x45, 0x95,
+	0xce, 0x63, 0x65, 0x6b, 0x58, 0x3a, 0xfe, 0xef,
+	0x7c, 0xe7, 0xbf, 0xfe, 0x3d, 0xf6, 0x5c, 0x7d,
+	0x6c, 0x5e, 0x06, 0x09, 0x1a, 0xf5, 0x61, 0xbb,
+	0x20, 0x93, 0x09, 0x5f, 0x05, 0x6d, 0xea, 0x87
+};
+
+const uint8 tssk_privateExponent[] =
+{
+	0x87, 0xa7, 0x19, 0x32, 0xda, 0x11, 0x87, 0x55,
+	0x58, 0x00, 0x16, 0x16, 0x25, 0x65, 0x68, 0xf8,
+	0x24, 0x3e, 0xe6, 0xfa, 0xe9, 0x67, 0x49, 0x94,
+	0xcf, 0x92, 0xcc, 0x33, 0x99, 0xe8, 0x08, 0x60,
+	0x17, 0x9a, 0x12, 0x9f, 0x24, 0xdd, 0xb1, 0x24,
+	0x99, 0xc7, 0x3a, 0xb8, 0x0a, 0x7b, 0x0d, 0xdd,
+	0x35, 0x07, 0x79, 0x17, 0x0b, 0x51, 0x9b, 0xb3,
+	0xc7, 0x10, 0x01, 0x13, 0xe7, 0x3f, 0xf3, 0x5f
+};
+
+const uint8 tssk_exponent[] =
+{
+	0x5b, 0x7b, 0x88, 0xc0
+};
+
+void gcc_write_server_security_data(STREAM* s, rdpSettings* settings)
+{
+	CryptoMd5 md5;
+	uint8* sigData;
+	int expLen, keyLen, sigDataLen;
+	uint8 encryptedSignature[TSSK_KEY_LENGTH];
+	uint8 signature[sizeof(initial_signature)];
+	uint32 headerLen, serverRandomLen, serverCertLen, wPublicKeyBlobLen;
+
+	if (!settings->encryption)
+	{
+		settings->encryption_method = ENCRYPTION_METHOD_NONE;
+		settings->encryption_level = ENCRYPTION_LEVEL_NONE;
+	}
+	else if ((settings->encryption_method & ENCRYPTION_METHOD_FIPS) != 0)
+	{
+		settings->encryption_method = ENCRYPTION_METHOD_FIPS;
+	}
+	else if ((settings->encryption_method & ENCRYPTION_METHOD_128BIT) != 0)
+	{
+		settings->encryption_method = ENCRYPTION_METHOD_128BIT;
+	}
+	else if ((settings->encryption_method & ENCRYPTION_METHOD_40BIT) != 0)
+	{
+		settings->encryption_method = ENCRYPTION_METHOD_40BIT;
+	}
+
+	if (settings->encryption_method != ENCRYPTION_METHOD_NONE)
+		settings->encryption_level = ENCRYPTION_LEVEL_CLIENT_COMPATIBLE;
+
+	headerLen = 12;
+	keyLen = 0;
+	wPublicKeyBlobLen = 0;
+	serverRandomLen = 0;
+	serverCertLen = 0;
+
+	if (settings->encryption_method != ENCRYPTION_METHOD_NONE ||
+	    settings->encryption_level != ENCRYPTION_LEVEL_NONE)
+	{
+		serverRandomLen = 32;
+
+		keyLen = settings->server_key->modulus.length;
+		expLen = sizeof(settings->server_key->exponent);
+		wPublicKeyBlobLen = 4; /* magic (RSA1) */
+		wPublicKeyBlobLen += 4; /* keylen */
+		wPublicKeyBlobLen += 4; /* bitlen */
+		wPublicKeyBlobLen += 4; /* datalen */
+		wPublicKeyBlobLen += expLen;
+		wPublicKeyBlobLen += keyLen;
+		wPublicKeyBlobLen += 8; /* 8 bytes of zero padding */
+
+		serverCertLen = 4; /* dwVersion */
+		serverCertLen += 4; /* dwSigAlgId */
+		serverCertLen += 4; /* dwKeyAlgId */
+		serverCertLen += 2; /* wPublicKeyBlobType */
+		serverCertLen += 2; /* wPublicKeyBlobLen */
+		serverCertLen += wPublicKeyBlobLen;
+		serverCertLen += 2; /* wSignatureBlobType */
+		serverCertLen += 2; /* wSignatureBlobLen */
+		serverCertLen += sizeof(encryptedSignature); /* SignatureBlob */
+		serverCertLen += 8; /* 8 bytes of zero padding */
+
+		headerLen += sizeof(serverRandomLen);
+		headerLen += sizeof(serverCertLen);
+		headerLen += serverRandomLen;
+		headerLen += serverCertLen;
+	}
+
+	gcc_write_user_data_header(s, SC_SECURITY, headerLen);
+
+	stream_write_uint32(s, settings->encryption_method); /* encryptionMethod */
+	stream_write_uint32(s, settings->encryption_level); /* encryptionLevel */
+
+	if (settings->encryption_method == ENCRYPTION_METHOD_NONE &&
+	    settings->encryption_level == ENCRYPTION_LEVEL_NONE)
+	{
+		return;
+	}
+
+	stream_write_uint32(s, serverRandomLen); /* serverRandomLen */
+	stream_write_uint32(s, serverCertLen); /* serverCertLen */
+
+	freerdp_blob_alloc(settings->server_random, serverRandomLen);
+	crypto_nonce(settings->server_random->data, serverRandomLen);
+	stream_write(s, settings->server_random->data, serverRandomLen);
+
+	sigData = stream_get_tail(s);
+
+	stream_write_uint32(s, CERT_CHAIN_VERSION_1); /* dwVersion (4 bytes) */
+	stream_write_uint32(s, SIGNATURE_ALG_RSA); /* dwSigAlgId */
+	stream_write_uint32(s, KEY_EXCHANGE_ALG_RSA); /* dwKeyAlgId */
+	stream_write_uint16(s, BB_RSA_KEY_BLOB); /* wPublicKeyBlobType */
+
+	stream_write_uint16(s, wPublicKeyBlobLen); /* wPublicKeyBlobLen */
+	stream_write(s, "RSA1", 4); /* magic */
+	stream_write_uint32(s, keyLen + 8); /* keylen */
+	stream_write_uint32(s, keyLen * 8); /* bitlen */
+	stream_write_uint32(s, keyLen - 1); /* datalen */
+
+	stream_write(s, settings->server_key->exponent, expLen);
+	stream_write(s, settings->server_key->modulus.data, keyLen);
+	stream_write_zero(s, 8);
+
+	sigDataLen = stream_get_tail(s) - sigData;
+
+	stream_write_uint16(s, BB_RSA_SIGNATURE_BLOB); /* wSignatureBlobType */
+	stream_write_uint16(s, keyLen + 8); /* wSignatureBlobLen */
+
+	memcpy(signature, initial_signature, sizeof(initial_signature));
+
+	md5 = crypto_md5_init();
+	crypto_md5_update(md5, sigData, sigDataLen);
+	crypto_md5_final(md5, signature);
+
+	crypto_rsa_private_encrypt(signature, sizeof(signature), TSSK_KEY_LENGTH,
+		tssk_modulus, tssk_privateExponent, encryptedSignature);
+
+	stream_write(s, encryptedSignature, sizeof(encryptedSignature));
+	stream_write_zero(s, 8);
 }
 
 /**
@@ -844,7 +1014,7 @@ void gcc_write_server_security_data(STREAM* s, rdpSettings *settings)
  * @param settings rdp settings
  */
 
-boolean gcc_read_client_network_data(STREAM* s, rdpSettings *settings, uint16 blockLength)
+boolean gcc_read_client_network_data(STREAM* s, rdpSettings* settings, uint16 blockLength)
 {
 	int i;
 
@@ -876,7 +1046,7 @@ boolean gcc_read_client_network_data(STREAM* s, rdpSettings *settings, uint16 bl
  * @param settings rdp settings
  */
 
-void gcc_write_client_network_data(STREAM* s, rdpSettings *settings)
+void gcc_write_client_network_data(STREAM* s, rdpSettings* settings)
 {
 	int i;
 	uint16 length;
@@ -898,7 +1068,7 @@ void gcc_write_client_network_data(STREAM* s, rdpSettings *settings)
 	}
 }
 
-boolean gcc_read_server_network_data(STREAM* s, rdpSettings *settings)
+boolean gcc_read_server_network_data(STREAM* s, rdpSettings* settings)
 {
 	int i;
 	uint16 MCSChannelId;
@@ -926,7 +1096,7 @@ boolean gcc_read_server_network_data(STREAM* s, rdpSettings *settings)
 	return true;
 }
 
-void gcc_write_server_network_data(STREAM* s, rdpSettings *settings)
+void gcc_write_server_network_data(STREAM* s, rdpSettings* settings)
 {
 	int i;
 
@@ -951,7 +1121,7 @@ void gcc_write_server_network_data(STREAM* s, rdpSettings *settings)
  * @param settings rdp settings
  */
 
-boolean gcc_read_client_cluster_data(STREAM* s, rdpSettings *settings, uint16 blockLength)
+boolean gcc_read_client_cluster_data(STREAM* s, rdpSettings* settings, uint16 blockLength)
 {
 	uint32 flags;
 
@@ -973,7 +1143,7 @@ boolean gcc_read_client_cluster_data(STREAM* s, rdpSettings *settings, uint16 bl
  * @param settings rdp settings
  */
 
-void gcc_write_client_cluster_data(STREAM* s, rdpSettings *settings)
+void gcc_write_client_cluster_data(STREAM* s, rdpSettings* settings)
 {
 	uint32 flags;
 
@@ -995,7 +1165,7 @@ void gcc_write_client_cluster_data(STREAM* s, rdpSettings *settings)
  * @param settings rdp settings
  */
 
-boolean gcc_read_client_monitor_data(STREAM* s, rdpSettings *settings, uint16 blockLength)
+boolean gcc_read_client_monitor_data(STREAM* s, rdpSettings* settings, uint16 blockLength)
 {
 	printf("CS_MONITOR\n");
 	return true;
@@ -1008,7 +1178,7 @@ boolean gcc_read_client_monitor_data(STREAM* s, rdpSettings *settings, uint16 bl
  * @param settings rdp settings
  */
 
-void gcc_write_client_monitor_data(STREAM* s, rdpSettings *settings)
+void gcc_write_client_monitor_data(STREAM* s, rdpSettings* settings)
 {
 	int i;
 	uint16 length;

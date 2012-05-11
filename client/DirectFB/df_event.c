@@ -17,8 +17,7 @@
  * limitations under the License.
  */
 
-#include <freerdp/kbd/kbd.h>
-#include <freerdp/kbd/vkcodes.h>
+#include <freerdp/locale/keyboard.h>
 
 #include "df_event.h"
 
@@ -191,10 +190,8 @@ void df_send_mouse_wheel_event(rdpInput* input, sint16 axisrel, uint16 x, uint16
 
 void df_send_keyboard_event(rdpInput* input, boolean down, uint8 keycode, uint8 function)
 {
-	uint16 flags;
 	uint8 vkcode;
-	uint8 scancode;
-	boolean extended;
+	RDP_SCANCODE rdp_scancode;
 	
 	if (keycode)
 		vkcode = keymap[keycode];
@@ -202,13 +199,10 @@ void df_send_keyboard_event(rdpInput* input, boolean down, uint8 keycode, uint8 
 		vkcode = functionmap[function];
 	else
 		return;
-	
-	scancode = freerdp_kbd_get_scancode_by_virtualkey(vkcode, &extended);
 
-	flags = (extended) ? KBD_FLAGS_EXTENDED : 0;
-	flags |= (down) ? KBD_FLAGS_DOWN : KBD_FLAGS_RELEASE;
+	rdp_scancode = freerdp_keyboard_get_rdp_scancode_from_virtual_key_code(vkcode);
 
-	input->KeyboardEvent(input, flags, scancode);
+	freerdp_input_send_keyboard_event_2(input, down, rdp_scancode);
 }
 
 boolean df_event_process(freerdp* instance, DFBEvent* event)

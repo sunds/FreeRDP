@@ -55,8 +55,6 @@ static const char* const PRIMARY_DRAWING_ORDER_STRINGS[] =
 	"GlyphIndex"
 };
 
-#define PRIMARY_DRAWING_ORDER_COUNT	(sizeof(PRIMARY_DRAWING_ORDER_STRINGS) / sizeof(PRIMARY_DRAWING_ORDER_STRINGS[0]))
-
 static const char* const SECONDARY_DRAWING_ORDER_STRINGS[] =
 {
 	"Cache Bitmap",
@@ -70,7 +68,7 @@ static const char* const SECONDARY_DRAWING_ORDER_STRINGS[] =
 	"Cache Bitmap V3"
 };
 
-#define SECONDARY_DRAWING_ORDER_COUNT	(sizeof(SECONDARY_DRAWING_ORDER_STRINGS) / sizeof(SECONDARY_DRAWING_ORDER_STRINGS[0]))
+#define SECONDARY_DRAWING_ORDER_COUNT	(ARRAY_SIZE(SECONDARY_DRAWING_ORDER_STRINGS))
 
 static const char* const ALTSEC_DRAWING_ORDER_STRINGS[] =
 {
@@ -90,7 +88,7 @@ static const char* const ALTSEC_DRAWING_ORDER_STRINGS[] =
 	"Frame Marker"
 };
 
-#define ALTSEC_DRAWING_ORDER_COUNT	(sizeof(ALTSEC_DRAWING_ORDER_STRINGS) / sizeof(ALTSEC_DRAWING_ORDER_STRINGS[0]))
+#define ALTSEC_DRAWING_ORDER_COUNT	(ARRAY_SIZE(ALTSEC_DRAWING_ORDER_STRINGS))
 
 #endif /* WITH_DEBUG_ORDERS */
 
@@ -123,6 +121,8 @@ static const uint8 PRIMARY_DRAWING_ORDER_FIELD_BYTES[] =
 	GLYPH_INDEX_ORDER_FIELD_BYTES
 };
 
+#define PRIMARY_DRAWING_ORDER_COUNT	(ARRAY_SIZE(PRIMARY_DRAWING_ORDER_FIELD_BYTES))
+
 static const uint8 CBR2_BPP[] =
 {
 		0, 0, 0, 8, 16, 24, 32
@@ -138,7 +138,7 @@ static const uint8 BMF_BPP[] =
 		0, 1, 0, 8, 16, 24, 32
 };
 
-INLINE void update_read_coord(STREAM* s, sint32* coord, boolean delta)
+static INLINE void update_read_coord(STREAM* s, sint32* coord, boolean delta)
 {
 	sint8 lsi8;
 	sint16 lsi16;
@@ -155,7 +155,7 @@ INLINE void update_read_coord(STREAM* s, sint32* coord, boolean delta)
 	}
 }
 
-INLINE void update_read_color(STREAM* s, uint32* color)
+static INLINE void update_read_color(STREAM* s, uint32* color)
 {
 	uint8 byte;
 
@@ -167,7 +167,7 @@ INLINE void update_read_color(STREAM* s, uint32* color)
 	*color |= (byte << 16);
 }
 
-INLINE void update_read_colorref(STREAM* s, uint32* color)
+static INLINE void update_read_colorref(STREAM* s, uint32* color)
 {
 	uint8 byte;
 
@@ -180,7 +180,7 @@ INLINE void update_read_colorref(STREAM* s, uint32* color)
 	stream_seek_uint8(s);
 }
 
-INLINE void update_read_color_quad(STREAM* s, uint32* color)
+static INLINE void update_read_color_quad(STREAM* s, uint32* color)
 {
 	uint8 byte;
 
@@ -193,7 +193,7 @@ INLINE void update_read_color_quad(STREAM* s, uint32* color)
 	stream_seek_uint8(s);
 }
 
-INLINE void update_read_2byte_unsigned(STREAM* s, uint32* value)
+static INLINE void update_read_2byte_unsigned(STREAM* s, uint32* value)
 {
 	uint8 byte;
 
@@ -211,7 +211,7 @@ INLINE void update_read_2byte_unsigned(STREAM* s, uint32* value)
 	}
 }
 
-INLINE void update_read_2byte_signed(STREAM* s, sint32* value)
+static INLINE void update_read_2byte_signed(STREAM* s, sint32* value)
 {
 	uint8 byte;
 	boolean negative;
@@ -232,7 +232,7 @@ INLINE void update_read_2byte_signed(STREAM* s, sint32* value)
 		*value *= -1;
 }
 
-INLINE void update_read_4byte_unsigned(STREAM* s, uint32* value)
+static INLINE void update_read_4byte_unsigned(STREAM* s, uint32* value)
 {
 	uint8 byte;
 	uint8 count;
@@ -276,7 +276,7 @@ INLINE void update_read_4byte_unsigned(STREAM* s, uint32* value)
 	}
 }
 
-INLINE void update_read_delta(STREAM* s, sint32* value)
+static INLINE void update_read_delta(STREAM* s, sint32* value)
 {
 	uint8 byte;
 
@@ -294,7 +294,7 @@ INLINE void update_read_delta(STREAM* s, sint32* value)
 	}
 }
 
-INLINE void update_read_glyph_delta(STREAM* s, uint16* value)
+static INLINE void update_read_glyph_delta(STREAM* s, uint16* value)
 {
 	uint8 byte;
 
@@ -306,7 +306,7 @@ INLINE void update_read_glyph_delta(STREAM* s, uint16* value)
 		*value = (byte & 0x3F);
 }
 
-INLINE void update_seek_glyph_delta(STREAM* s)
+static INLINE void update_seek_glyph_delta(STREAM* s)
 {
 	uint8 byte;
 
@@ -316,7 +316,7 @@ INLINE void update_seek_glyph_delta(STREAM* s)
 		stream_seek_uint8(s);
 }
 
-INLINE void update_read_brush(STREAM* s, rdpBrush* brush, uint8 fieldFlags)
+static INLINE void update_read_brush(STREAM* s, rdpBrush* brush, uint8 fieldFlags)
 {
 	if (fieldFlags & ORDER_FIELD_01)
 		stream_read_uint8(s, brush->x);
@@ -354,7 +354,7 @@ INLINE void update_read_brush(STREAM* s, rdpBrush* brush, uint8 fieldFlags)
 	}
 }
 
-INLINE void update_read_delta_rects(STREAM* s, DELTA_RECT* rectangles, int number)
+static INLINE void update_read_delta_rects(STREAM* s, DELTA_RECT* rectangles, int number)
 {
 	int i;
 	uint8 flags = 0;
@@ -399,7 +399,7 @@ INLINE void update_read_delta_rects(STREAM* s, DELTA_RECT* rectangles, int numbe
 	}
 }
 
-INLINE void update_read_delta_points(STREAM* s, DELTA_POINT* points, int number, sint16 x, sint16 y)
+static INLINE void update_read_delta_points(STREAM* s, DELTA_POINT* points, int number, sint16 x, sint16 y)
 {
 	int i;
 	uint8 flags = 0;
@@ -1086,12 +1086,18 @@ void update_read_polygon_sc_order(STREAM* s, ORDER_INFO* orderInfo, POLYGON_SC_O
 		update_read_color(s, &polygon_sc->brushColor);
 
 	if (orderInfo->fieldFlags & ORDER_FIELD_06)
-		stream_read_uint8(s, polygon_sc->nDeltaEntries);
+		stream_read_uint8(s, polygon_sc->numPoints);
 
 	if (orderInfo->fieldFlags & ORDER_FIELD_07)
 	{
 		stream_read_uint8(s, polygon_sc->cbData);
-		stream_seek(s, polygon_sc->cbData);
+
+		if (polygon_sc->points == NULL)
+			polygon_sc->points = (DELTA_POINT*) xmalloc(sizeof(DELTA_POINT) * polygon_sc->numPoints);
+		else
+			polygon_sc->points = (DELTA_POINT*) xrealloc(polygon_sc->points, sizeof(DELTA_POINT) * polygon_sc->numPoints);
+
+		update_read_delta_points(s, polygon_sc->points, polygon_sc->numPoints, polygon_sc->xStart, polygon_sc->yStart);
 	}
 }
 
@@ -1118,13 +1124,22 @@ void update_read_polygon_cb_order(STREAM* s, ORDER_INFO* orderInfo, POLYGON_CB_O
 	update_read_brush(s, &polygon_cb->brush, orderInfo->fieldFlags >> 6);
 
 	if (orderInfo->fieldFlags & ORDER_FIELD_12)
-		stream_read_uint8(s, polygon_cb->nDeltaEntries);
+		stream_read_uint8(s, polygon_cb->numPoints);
 
 	if (orderInfo->fieldFlags & ORDER_FIELD_13)
 	{
 		stream_read_uint8(s, polygon_cb->cbData);
-		stream_seek(s, polygon_cb->cbData);
+
+		if (polygon_cb->points == NULL)
+			polygon_cb->points = (DELTA_POINT*) xmalloc(sizeof(DELTA_POINT) * polygon_cb->numPoints);
+		else
+			polygon_cb->points = (DELTA_POINT*) xrealloc(polygon_cb->points, sizeof(DELTA_POINT) * polygon_cb->numPoints);
+
+		update_read_delta_points(s, polygon_cb->points, polygon_cb->numPoints, polygon_cb->xStart, polygon_cb->yStart);
 	}
+
+	polygon_cb->backMode = (polygon_cb->bRop2 & 0x80) ? BACKMODE_TRANSPARENT : BACKMODE_OPAQUE;
+	polygon_cb->bRop2 = (polygon_cb->bRop2 & 0x1F);
 }
 
 void update_read_ellipse_sc_order(STREAM* s, ORDER_INFO* orderInfo, ELLIPSE_SC_ORDER* ellipse_sc)
@@ -1333,8 +1348,11 @@ void update_read_cache_glyph_order(STREAM* s, CACHE_GLYPH_ORDER* cache_glyph_ord
 
 	for (i = 0; i < (int) cache_glyph_order->cGlyphs; i++)
 	{
-		glyph = (GLYPH_DATA*) xmalloc(sizeof(GLYPH_DATA));
-		cache_glyph_order->glyphData[i] = glyph;
+		if (cache_glyph_order->glyphData[i] == NULL)
+		{
+			cache_glyph_order->glyphData[i] = (GLYPH_DATA*) xmalloc(sizeof(GLYPH_DATA));
+		}
+		glyph = cache_glyph_order->glyphData[i];
 
 		stream_read_uint16(s, glyph->cacheIndex);
 		stream_read_uint16(s, lsi16);
@@ -1367,8 +1385,11 @@ void update_read_cache_glyph_v2_order(STREAM* s, CACHE_GLYPH_V2_ORDER* cache_gly
 
 	for (i = 0; i < (int) cache_glyph_v2_order->cGlyphs; i++)
 	{
-		glyph = (GLYPH_DATA_V2*) xmalloc(sizeof(GLYPH_DATA_V2));
-		cache_glyph_v2_order->glyphData[i] = glyph;
+		if (cache_glyph_v2_order->glyphData[i] == NULL)
+		{
+			cache_glyph_v2_order->glyphData[i] = (GLYPH_DATA_V2*) xmalloc(sizeof(GLYPH_DATA_V2));
+		}
+		glyph = cache_glyph_v2_order->glyphData[i];
 
 		stream_read_uint8(s, glyph->cacheIndex);
 		update_read_2byte_signed(s, &glyph->x);
@@ -1677,7 +1698,7 @@ void update_read_bounds(STREAM* s, rdpBounds* bounds)
 		update_read_coord(s, &bounds->bottom, true);
 }
 
-void update_recv_primary_order(rdpUpdate* update, STREAM* s, uint8 flags)
+boolean update_recv_primary_order(rdpUpdate* update, STREAM* s, uint8 flags)
 {
 	ORDER_INFO* orderInfo;
 	rdpContext* context = update->context;
@@ -1687,6 +1708,12 @@ void update_recv_primary_order(rdpUpdate* update, STREAM* s, uint8 flags)
 
 	if (flags & ORDER_TYPE_CHANGE)
 		stream_read_uint8(s, orderInfo->orderType); /* orderType (1 byte) */
+
+	if (orderInfo->orderType >= PRIMARY_DRAWING_ORDER_COUNT)
+	{
+		printf("Invalid Primary Drawing Order (0x%02X)\n", orderInfo->orderType);
+		return false;
+	}
 
 	update_read_field_flags(s, &(orderInfo->fieldFlags), flags,
 			PRIMARY_DRAWING_ORDER_FIELD_BYTES[orderInfo->orderType]);
@@ -1702,10 +1729,7 @@ void update_recv_primary_order(rdpUpdate* update, STREAM* s, uint8 flags)
 	orderInfo->deltaCoordinates = (flags & ORDER_DELTA_COORDINATES) ? true : false;
 
 #ifdef WITH_DEBUG_ORDERS
-	if (orderInfo->orderType < PRIMARY_DRAWING_ORDER_COUNT)
-		printf("%s Primary Drawing Order (0x%02X)\n", PRIMARY_DRAWING_ORDER_STRINGS[orderInfo->orderType], orderInfo->orderType);
-	else
-		printf("Unknown Primary Drawing Order (0x%02X)\n", orderInfo->orderType);
+	printf("%s Primary Drawing Order (0x%02X)\n", PRIMARY_DRAWING_ORDER_STRINGS[orderInfo->orderType], orderInfo->orderType);
 #endif
 
 	switch (orderInfo->orderType)
@@ -1828,6 +1852,8 @@ void update_recv_primary_order(rdpUpdate* update, STREAM* s, uint8 flags)
 	{
 		IFCALL(update->SetBounds, context, NULL);
 	}
+
+	return true;
 }
 
 void update_recv_secondary_order(rdpUpdate* update, STREAM* s, uint8 flags)
@@ -1998,7 +2024,7 @@ void update_recv_altsec_order(rdpUpdate* update, STREAM* s, uint8 flags)
 	}
 }
 
-void update_recv_order(rdpUpdate* update, STREAM* s)
+boolean update_recv_order(rdpUpdate* update, STREAM* s)
 {
 	uint8 controlFlags;
 
@@ -2009,6 +2035,10 @@ void update_recv_order(rdpUpdate* update, STREAM* s)
 	else if (controlFlags & ORDER_SECONDARY)
 		update_recv_secondary_order(update, s, controlFlags);
 	else
-		update_recv_primary_order(update, s, controlFlags);
-}
+	{
+		if (!update_recv_primary_order(update, s, controlFlags))
+			return false;
+	}
 
+	return true;
+}

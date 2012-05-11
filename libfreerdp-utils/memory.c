@@ -38,7 +38,10 @@ void* xmalloc(size_t size)
 	mem = malloc(size);
 
 	if (mem == NULL)
+	{
 		perror("xmalloc");
+		printf("xmalloc: failed to allocate memory of size: %d\n", (int) size);
+	}
 
 	return mem;
 }
@@ -58,7 +61,10 @@ void* xzalloc(size_t size)
 	mem = calloc(1, size);
 
 	if (mem == NULL)
+	{
 		perror("xzalloc");
+		printf("xzalloc: failed to allocate memory of size: %d\n", (int) size);
+	}
 
 	return mem;
 }
@@ -118,4 +124,51 @@ char* xstrdup(const char* str)
 		perror("strdup");
 
 	return mem;
+}
+
+/**
+ * Duplicate a string in memory.
+ * @param wstr
+ * @return
+ */
+
+wchar_t* xwcsdup(const wchar_t* wstr)
+{
+	wchar_t* mem;
+
+	if (wstr == NULL)
+		return NULL;
+
+#ifdef _WIN32
+	mem = _wcsdup(wstr);
+#elif sun
+	mem = wsdup(wstr);
+#else
+	mem = wcsdup(wstr);
+#endif
+
+	if (mem == NULL)
+		perror("wstrdup");
+
+	return mem;
+}
+
+char* xstrtoup(const char* str)
+{
+	char* out;
+	char* p;
+	int c;
+	out = xstrdup(str);
+	if(out != NULL)
+	{
+		p = out;
+		while(*p != '\0')
+		{
+			c = toupper((unsigned char)*p);
+			*p++ = (char)c;
+		}
+		return out;
+	}
+	else
+		return NULL;
 }

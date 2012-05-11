@@ -42,6 +42,30 @@ void update_gdi_patblt(rdpContext* context, PATBLT_ORDER* patblt)
 	brush->style = style;
 }
 
+void update_gdi_polygon_sc(rdpContext* context, POLYGON_SC_ORDER* polygon_sc)
+{
+	rdpCache* cache = context->cache;
+	IFCALL(cache->brush->PolygonSC, context, polygon_sc);
+}
+
+void update_gdi_polygon_cb(rdpContext* context, POLYGON_CB_ORDER* polygon_cb)
+{
+	uint8 style;
+	rdpBrush* brush = &polygon_cb->brush;
+	rdpCache* cache = context->cache;
+
+	style = brush->style;
+
+	if (brush->style & CACHED_BRUSH)
+	{
+		brush->data = brush_cache_get(cache->brush, brush->index, &brush->bpp);
+		brush->style = 0x03;
+	}
+
+	IFCALL(cache->brush->PolygonCB, context, polygon_cb);
+	brush->style = style;
+}
+
 void update_gdi_cache_brush(rdpContext* context, CACHE_BRUSH_ORDER* cache_brush)
 {
 	rdpCache* cache = context->cache;
@@ -86,6 +110,8 @@ void* brush_cache_get(rdpBrushCache* brush, uint32 index, uint32* bpp)
 
 void brush_cache_put(rdpBrushCache* brush, uint32 index, void* entry, uint32 bpp)
 {
+	void* prevEntry;
+
 	if (bpp == 1)
 	{
 		if (index > brush->maxMonoEntries)
@@ -93,6 +119,11 @@ void brush_cache_put(rdpBrushCache* brush, uint32 index, void* entry, uint32 bpp
 			printf("invalid brush (%d bpp) index: 0x%04X\n", bpp, index);
 			return;
 		}
+
+		prevEntry = brush->monoEntries[index].entry;
+
+		if (prevEntry != NULL)
+			xfree(prevEntry);
 
 		brush->monoEntries[index].bpp = bpp;
 		brush->monoEntries[index].entry = entry;
@@ -105,6 +136,11 @@ void brush_cache_put(rdpBrushCache* brush, uint32 index, void* entry, uint32 bpp
 			return;
 		}
 
+		prevEntry = brush->entries[index].entry;
+
+		if (prevEntry != NULL)
+			xfree(prevEntry);
+
 		brush->entries[index].bpp = bpp;
 		brush->entries[index].entry = entry;
 	}
@@ -115,8 +151,12 @@ void brush_cache_register_callbacks(rdpUpdate* update)
 	rdpCache* cache = update->context->cache;
 
 	cache->brush->PatBlt = update->primary->PatBlt;
+	cache->brush->PolygonSC = update->primary->PolygonSC;
+	cache->brush->PolygonCB = update->primary->PolygonCB;
 
 	update->primary->PatBlt = update_gdi_patblt;
+	update->primary->PolygonSC = update_gdi_polygon_sc;
+	update->primary->PolygonCB = update_gdi_polygon_cb;
 	update->secondary->CacheBrush = update_gdi_cache_brush;
 }
 
@@ -142,10 +182,32 @@ rdpBrushCache* brush_cache_new(rdpSettings* settings)
 
 void brush_cache_free(rdpBrushCache* brush)
 {
+	int i;
+
 	if (brush != NULL)
 	{
-		xfree(brush->entries);
-		xfree(brush->monoEntries);
+		if (brush->entries != NULL)
+		{
+			for (i = 0; i < (int) brush->maxEntries; i++)
+			{
+				if (brush->entries[i].entry != NULL)
+					xfree(brush->entries[i].entry);
+			}
+
+			xfree(brush->entries);
+		}
+
+		if (brush->monoEntries != NULL)
+		{
+			for (i = 0; i < (int) brush->maxMonoEntries; i++)
+			{
+				if (brush->monoEntries[i].entry != NULL)
+					xfree(brush->monoEntries[i].entry);
+			}
+
+			xfree(brush->monoEntries);
+		}
+
 		xfree(brush);
 	}
 }

@@ -18,16 +18,16 @@
  */
 
 #include "config.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <winpr/windows.h>
 #include <freerdp/utils/memory.h>
 #include <freerdp/utils/wait_obj.h>
 
 #ifndef _WIN32
 #include <sys/time.h>
-#else
-#include <winsock2.h>
 #endif
 
 #ifdef HAVE_UNISTD_H

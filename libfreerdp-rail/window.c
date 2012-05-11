@@ -17,6 +17,7 @@
  * limitations under the License.
  */
 
+#include <winpr/windows.h>
 #include <freerdp/utils/stream.h>
 #include <freerdp/utils/memory.h>
 #include <freerdp/utils/hexdump.h>
@@ -96,7 +97,7 @@ void print_window_styles(uint32 style)
 	int i;
 
 	printf("Window Styles:\n{\n");
-	for (i = 0; i < sizeof(WINDOW_STYLES) / sizeof(WINDOW_STYLE); i++)
+	for (i = 0; i < ARRAY_SIZE(WINDOW_STYLES); i++)
 	{
 		if (style & WINDOW_STYLES[i].style)
 		{
@@ -117,7 +118,7 @@ void print_extended_window_styles(uint32 style)
 	int i;
 
 	printf("Extended Window Styles:\n{\n");
-	for (i = 0; i < sizeof(EXTENDED_WINDOW_STYLES) / sizeof(WINDOW_STYLE); i++)
+	for (i = 0; i < ARRAY_SIZE(EXTENDED_WINDOW_STYLES); i++)
 	{
 		if (style & EXTENDED_WINDOW_STYLES[i].style)
 		{

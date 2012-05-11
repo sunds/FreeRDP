@@ -39,14 +39,29 @@ set(FREERDP_CODEC_SRCS
 	rfx_types.h
 	rfx.c
 	nsc.c
+	nsc_encode.c
+	nsc_encode.h
+	nsc_types.h
+	mppc_dec.c
+	mppc_enc.c
 )
 
 if(WITH_SSE2)
 	set(FREERDP_CODEC_SRCS ${FREERDP_CODEC_SRCS}
 	rfx_sse2.c
 	rfx_sse2.h
+	nsc_sse2.c
+	nsc_sse2.h
 )
-	set_property(SOURCE rfx_sse2.c PROPERTY COMPILE_FLAGS "-msse2")
+	set_property(SOURCE rfx_sse2.c nsc_sse2.c PROPERTY COMPILE_FLAGS "-msse2")
+endif()
+
+if(WITH_NEON)
+	set(FREERDP_CODEC_SRCS ${FREERDP_CODEC_SRCS}
+	rfx_neon.c
+	rfx_neon.h
+)
+	set_property(SOURCE rfx_neon.c PROPERTY COMPILE_FLAGS "-mfpu=neon -mfloat-abi=softfp")
 endif()
 
 add_library(freerdp-codec ${FREERDP_CODEC_SRCS})

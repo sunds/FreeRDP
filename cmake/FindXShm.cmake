@@ -28,7 +28,7 @@
 # limitations under the License.
 #=============================================================================
 
-find_path(XSHM_INCLUDE_DIR NAMES XShm.h
+find_path(XSHM_INCLUDE_DIR NAMES X11/extensions/XShm.h
           PATH_SUFFIXES X11/extensions
           DOC "The XShm include directory"
 )
@@ -38,7 +38,7 @@ find_library(XSHM_LIBRARY NAMES Xext
 )
 
 include(FindPackageHandleStandardArgs)
-FIND_PACKAGE_HANDLE_STANDARD_ARGS(XSHM DEFAULT_MSG XSHM_LIBRARY XSHM_INCLUDE_DIR)
+FIND_PACKAGE_HANDLE_STANDARD_ARGS(XShm DEFAULT_MSG XSHM_LIBRARY XSHM_INCLUDE_DIR)
 
 if(XSHM_FOUND)
   set( XSHM_LIBRARIES ${XSHM_LIBRARY} )

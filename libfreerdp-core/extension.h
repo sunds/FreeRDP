@@ -21,13 +21,11 @@
 #ifndef __EXTENSION_H
 #define __EXTENSION_H
 
+#include <winpr/windows.h>
+
 #include <freerdp/api.h>
 #include <freerdp/freerdp.h>
 #include <freerdp/extension.h>
-
-#ifdef _WIN32
-#include <windows.h>
-#endif
 
 #define FREERDP_EXT_MAX_COUNT 16
 

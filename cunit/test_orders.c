@@ -431,6 +431,7 @@ void test_read_fast_index_order(void)
 	memset(orderInfo, 0, sizeof(ORDER_INFO));
 	orderInfo->fieldFlags = 0x70FF;
 
+	memset(&fast_index, 0, sizeof(FAST_INDEX_ORDER));
 	update_read_fast_index_order(s, orderInfo, &fast_index);
 
 	CU_ASSERT(fast_index.cacheId == 7);
@@ -445,7 +446,7 @@ void test_read_fast_index_order(void)
 	CU_ASSERT(fast_index.opLeft == 0);
 	CU_ASSERT(fast_index.opTop == 0);
 	CU_ASSERT(fast_index.opRight == 0);
-	CU_ASSERT(fast_index.opBottom == 524);
+	CU_ASSERT(fast_index.opBottom == 0);
 	CU_ASSERT(fast_index.x == -32768);
 	CU_ASSERT(fast_index.y == 124);
 
@@ -516,7 +517,7 @@ void test_read_polygon_cb_order(void)
 	CU_ASSERT(polygon_cb.brush.x == 4);
 	CU_ASSERT(polygon_cb.brush.y == 3);
 	CU_ASSERT(polygon_cb.brush.style == 0x81);
-	CU_ASSERT(polygon_cb.nDeltaEntries == 3);
+	CU_ASSERT(polygon_cb.numPoints == 3);
 	CU_ASSERT(polygon_cb.cbData == 5);
 
 	CU_ASSERT(stream_get_length(s) == (sizeof(polygon_cb_order) - 1));

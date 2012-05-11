@@ -28,7 +28,7 @@
 # limitations under the License.
 #=============================================================================
 
-find_path(XKBFILE_INCLUDE_DIR NAMES XKBfile.h
+find_path(XKBFILE_INCLUDE_DIR NAMES X11/extensions/XKBfile.h
           PATH_SUFFIXES X11/extensions
           DOC "The XKBFile include directory"
 )
@@ -38,7 +38,7 @@ find_library(XKBFILE_LIBRARY NAMES xkbfile
 )
 
 include(FindPackageHandleStandardArgs)
-FIND_PACKAGE_HANDLE_STANDARD_ARGS(XKBFILE DEFAULT_MSG XKBFILE_LIBRARY XKBFILE_INCLUDE_DIR)
+FIND_PACKAGE_HANDLE_STANDARD_ARGS(XKBFile DEFAULT_MSG XKBFILE_LIBRARY XKBFILE_INCLUDE_DIR)
 
 if(XKBFILE_FOUND)
   set( XKBFILE_LIBRARIES ${XKBFILE_LIBRARY} )

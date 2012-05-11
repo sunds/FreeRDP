@@ -29,12 +29,44 @@ void update_pointer_position(rdpContext* context, POINTER_POSITION_UPDATE* point
 
 void update_pointer_system(rdpContext* context, POINTER_SYSTEM_UPDATE* pointer_system)
 {
+	switch (pointer_system->type)
+	{
+		case SYSPTR_NULL:
+			Pointer_SetNull(context);
+			break;
 
+		case SYSPTR_DEFAULT:
+			Pointer_SetDefault(context);
+			break;
+
+		default:
+			printf("Unknown system pointer type (0x%08X)\n", pointer_system->type);
+	}
 }
 
 void update_pointer_color(rdpContext* context, POINTER_COLOR_UPDATE* pointer_color)
 {
+	rdpPointer* pointer;
+	rdpCache* cache = context->cache;
 
+	pointer = Pointer_Alloc(context);
+
+	if (pointer != NULL)
+	{
+		pointer->xorBpp = 24;
+		pointer->xPos = pointer_color->xPos;
+		pointer->yPos = pointer_color->yPos;
+		pointer->width = pointer_color->width;
+		pointer->height = pointer_color->height;
+		pointer->lengthAndMask = pointer_color->lengthAndMask;
+		pointer->lengthXorMask = pointer_color->lengthXorMask;
+		pointer->xorMaskData = pointer_color->xorMaskData;
+		pointer->andMaskData = pointer_color->andMaskData;
+
+		pointer->New(context, pointer);
+		pointer_cache_put(cache->pointer, pointer_color->cacheIndex, pointer);
+		Pointer_Set(context, pointer);
+	}
 }
 
 void update_pointer_new(rdpContext* context, POINTER_NEW_UPDATE* pointer_new)
@@ -90,11 +122,18 @@ rdpPointer* pointer_cache_get(rdpPointerCache* pointer_cache, uint32 index)
 
 void pointer_cache_put(rdpPointerCache* pointer_cache, uint32 index, rdpPointer* pointer)
 {
+	rdpPointer* prevPointer;
+
 	if (index >= pointer_cache->cacheSize)
 	{
 		printf("invalid pointer index:%d\n", index);
 		return;
 	}
+
+	prevPointer = pointer_cache->entries[index];
+
+	if (prevPointer != NULL)
+		Pointer_Free(pointer_cache->update->context, prevPointer);
 
 	pointer_cache->entries[index] = pointer;
 }
@@ -121,7 +160,7 @@ rdpPointerCache* pointer_cache_new(rdpSettings* settings)
 		pointer_cache->settings = settings;
 		pointer_cache->cacheSize = settings->pointer_cache_size;
 		pointer_cache->update = ((freerdp*) settings->instance)->update;
-		pointer_cache->entries = xzalloc(sizeof(rdpPointer**) * pointer_cache->cacheSize);
+		pointer_cache->entries = (rdpPointer**) xzalloc(sizeof(rdpPointer*) * pointer_cache->cacheSize);
 	}
 
 	return pointer_cache;
@@ -139,17 +178,7 @@ void pointer_cache_free(rdpPointerCache* pointer_cache)
 			pointer = pointer_cache->entries[i];
 
 			if (pointer != NULL)
-			{
-				pointer->Free(pointer_cache->update->context, pointer);
-
-				if (pointer->xorMaskData != NULL)
-					xfree(pointer->xorMaskData);
-
-				if (pointer->andMaskData != NULL)
-					xfree(pointer->andMaskData);
-
-				xfree(pointer);
-			}
+				Pointer_Free(pointer_cache->update->context, pointer);
 		}
 
 		xfree(pointer_cache->entries);

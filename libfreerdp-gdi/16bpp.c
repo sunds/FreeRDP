@@ -407,6 +407,60 @@ static int BitBlt_DSPDxax_16bpp(HGDI_DC hdcDest, int nXDest, int nYDest, int nWi
 	return 0;
 }
 
+static int BitBlt_PSDPxax_16bpp(HGDI_DC hdcDest, int nXDest, int nYDest, int nWidth, int nHeight, HGDI_DC hdcSrc, int nXSrc, int nYSrc)
+{
+	int x, y;
+	uint16* srcp;
+	uint16* dstp;
+	uint16* patp;
+	uint16 color16;
+
+	/* D = (S & D) | (~S & P) */
+
+	if (hdcDest->brush->style == GDI_BS_SOLID)
+	{
+		color16 = gdi_get_color_16bpp(hdcDest, hdcDest->brush->color);
+		patp = (uint16*) &color16;
+
+		for (y = 0; y < nHeight; y++)
+		{
+			srcp = (uint16*) gdi_get_bitmap_pointer(hdcSrc, nXSrc, nYSrc + y);
+			dstp = (uint16*) gdi_get_bitmap_pointer(hdcDest, nXDest, nYDest + y);
+
+			if (dstp != 0)
+			{
+				for (x = 0; x < nWidth; x++)
+				{
+					*dstp = (*srcp & *dstp) | (~(*srcp) & *patp);
+					srcp++;
+					dstp++;
+				}
+			}
+		}
+	}
+	else
+	{
+		for (y = 0; y < nHeight; y++)
+		{
+			srcp = (uint16*) gdi_get_bitmap_pointer(hdcSrc, nXSrc, nYSrc + y);
+			dstp = (uint16*) gdi_get_bitmap_pointer(hdcDest, nXDest, nYDest + y);
+
+			if (dstp != 0)
+			{
+				for (x = 0; x < nWidth; x++)
+				{
+					patp = (uint16*) gdi_get_brush_pointer(hdcDest, x, y);
+					*dstp = (*srcp & *dstp) | (~(*srcp) & *patp);
+					srcp++;
+					dstp++;
+				}
+			}
+		}
+	}
+
+	return 0;
+}
+
 static int BitBlt_SPna_16bpp(HGDI_DC hdcDest, int nXDest, int nYDest, int nWidth, int nHeight, HGDI_DC hdcSrc, int nXSrc, int nYSrc)
 {
 	int x, y;
@@ -431,6 +485,31 @@ static int BitBlt_SPna_16bpp(HGDI_DC hdcDest, int nXDest, int nYDest, int nWidth
 		}
 	}
 	
+	return 0;
+}
+
+static int BitBlt_DPa_16bpp(HGDI_DC hdcDest, int nXDest, int nYDest, int nWidth, int nHeight)
+{
+	int x, y;
+	uint16* dstp;
+	uint16* patp;
+
+	for (y = 0; y < nHeight; y++)
+	{
+		dstp = (uint16*) gdi_get_bitmap_pointer(hdcDest, nXDest, nYDest + y);
+
+		if (dstp != 0)
+		{
+			for (x = 0; x < nWidth; x++)
+			{
+				patp = (uint16*) gdi_get_brush_pointer(hdcDest, x, y);
+
+				*dstp = *dstp & *patp;
+				dstp++;
+			}
+		}
+	}
+
 	return 0;
 }
 
@@ -696,6 +775,10 @@ int BitBlt_16bpp(HGDI_DC hdcDest, int nXDest, int nYDest, int nWidth, int nHeigh
 			return BitBlt_DSPDxax_16bpp(hdcDest, nXDest, nYDest, nWidth, nHeight, hdcSrc, nXSrc, nYSrc);
 			break;
 			
+		case GDI_PSDPxax:
+			return BitBlt_PSDPxax_16bpp(hdcDest, nXDest, nYDest, nWidth, nHeight, hdcSrc, nXSrc, nYSrc);
+			break;
+
 		case GDI_NOTSRCCOPY:
 			return BitBlt_NOTSRCCOPY_16bpp(hdcDest, nXDest, nYDest, nWidth, nHeight, hdcSrc, nXSrc, nYSrc);
 			break;
@@ -778,6 +861,10 @@ int PatBlt_16bpp(HGDI_DC hdc, int nXLeft, int nYLeft, int nWidth, int nHeight, i
 			return BitBlt_WHITENESS_16bpp(hdc, nXLeft, nYLeft, nWidth, nHeight);
 			break;
 
+		case GDI_DPa:
+			return BitBlt_DPa_16bpp(hdc, nXLeft, nYLeft, nWidth, nHeight);
+			break;
+
 		case GDI_PDxn:
 			return BitBlt_PDxn_16bpp(hdc, nXLeft, nYLeft, nWidth, nHeight);
 			break;
@@ -791,202 +878,234 @@ int PatBlt_16bpp(HGDI_DC hdc, int nXLeft, int nYLeft, int nWidth, int nHeight, i
 	return 1;
 }
 
-INLINE void SetPixel_BLACK_16bpp(uint16 *pixel, uint16 *pen)
+static INLINE void SetPixel_BLACK_16bpp(uint16 *pixel, uint16 *pen)
 {
 	/* D = 0 */
 	*pixel = 0;
 }
 
-INLINE void SetPixel_NOTMERGEPEN_16bpp(uint16 *pixel, uint16 *pen)
+static INLINE void SetPixel_NOTMERGEPEN_16bpp(uint16 *pixel, uint16 *pen)
 {
 	/* D = ~(D | P) */
 	*pixel = ~(*pixel | *pen);
 }
 
-INLINE void SetPixel_MASKNOTPEN_16bpp(uint16 *pixel, uint16 *pen)
+static INLINE void SetPixel_MASKNOTPEN_16bpp(uint16 *pixel, uint16 *pen)
 {
 	/* D = D & ~P */
 	*pixel &= ~(*pen);
 }
 
-INLINE void SetPixel_NOTCOPYPEN_16bpp(uint16 *pixel, uint16 *pen)
+static INLINE void SetPixel_NOTCOPYPEN_16bpp(uint16 *pixel, uint16 *pen)
 {
 	/* D = ~P */
 	*pixel = ~(*pen);
 }
 
-INLINE void SetPixel_MASKPENNOT_16bpp(uint16 *pixel, uint16 *pen)
+static INLINE void SetPixel_MASKPENNOT_16bpp(uint16 *pixel, uint16 *pen)
 {
 	/* D = P & ~D */
 	*pixel = *pen & ~*pixel;
 }
 
-INLINE void SetPixel_NOT_16bpp(uint16 *pixel, uint16 *pen)
+static INLINE void SetPixel_NOT_16bpp(uint16 *pixel, uint16 *pen)
 {
 	/* D = ~D */
 	*pixel = ~(*pixel);
 }
 
-INLINE void SetPixel_XORPEN_16bpp(uint16 *pixel, uint16 *pen)
+static INLINE void SetPixel_XORPEN_16bpp(uint16 *pixel, uint16 *pen)
 {
 	/* D = D ^ P */
 	*pixel = *pixel ^ *pen;
 }
 
-INLINE void SetPixel_NOTMASKPEN_16bpp(uint16 *pixel, uint16 *pen)
+static INLINE void SetPixel_NOTMASKPEN_16bpp(uint16 *pixel, uint16 *pen)
 {
 	/* D = ~(D & P) */
 	*pixel = ~(*pixel & *pen);
 }
 
-INLINE void SetPixel_MASKPEN_16bpp(uint16 *pixel, uint16 *pen)
+static INLINE void SetPixel_MASKPEN_16bpp(uint16 *pixel, uint16 *pen)
 {
 	/* D = D & P */
 	*pixel &= *pen;
 }
 
-INLINE void SetPixel_NOTXORPEN_16bpp(uint16 *pixel, uint16 *pen)
+static INLINE void SetPixel_NOTXORPEN_16bpp(uint16 *pixel, uint16 *pen)
 {
 	/* D = ~(D ^ P) */
 	*pixel = ~(*pixel ^ *pen);
 }
 
-INLINE void SetPixel_NOP_16bpp(uint16 *pixel, uint16 *pen)
+static INLINE void SetPixel_NOP_16bpp(uint16 *pixel, uint16 *pen)
 {
 	/* D = D */
 }
 
-INLINE void SetPixel_MERGENOTPEN_16bpp(uint16 *pixel, uint16 *pen)
+static INLINE void SetPixel_MERGENOTPEN_16bpp(uint16 *pixel, uint16 *pen)
 {
 	/* D = D | ~P */
 	*pixel |= ~(*pen);
 }
 
-INLINE void SetPixel_COPYPEN_16bpp(uint16 *pixel, uint16 *pen)
+static INLINE void SetPixel_COPYPEN_16bpp(uint16 *pixel, uint16 *pen)
 {
 	/* D = P */
 	*pixel = *pen;
 }
 
-INLINE void SetPixel_MERGEPENNOT_16bpp(uint16 *pixel, uint16 *pen)
+static INLINE void SetPixel_MERGEPENNOT_16bpp(uint16 *pixel, uint16 *pen)
 {
 	/* D = P | ~D */
 	*pixel = *pen | ~(*pixel);
 }
 
-INLINE void SetPixel_MERGEPEN_16bpp(uint16 *pixel, uint16 *pen)
+static INLINE void SetPixel_MERGEPEN_16bpp(uint16 *pixel, uint16 *pen)
 {
 	/* D = P | D */
 	*pixel |= *pen;
 }
 
-INLINE void SetPixel_WHITE_16bpp(uint16 *pixel, uint16 *pen)
+static INLINE void SetPixel_WHITE_16bpp(uint16 *pixel, uint16 *pen)
 {
 	/* D = 1 */
 	*pixel = 0xFFFF;
 }
 
-pSetPixel16_ROP2 SetPixel16_ROP2_[16] =
+#define PIXEL_TYPE		uint16
+#define GDI_GET_POINTER		gdi_GetPointer_16bpp
+#define GDI_GET_PEN_COLOR	gdi_GetPenColor_16bpp
+
+#define LINE_TO			LineTo_BLACK_16bpp
+#define SET_PIXEL_ROP2		SetPixel_BLACK_16bpp
+#include "include/line.c"
+#undef LINE_TO
+#undef SET_PIXEL_ROP2
+
+#define LINE_TO			LineTo_NOTMERGEPEN_16bpp
+#define SET_PIXEL_ROP2		SetPixel_NOTMERGEPEN_16bpp
+#include "include/line.c"
+#undef LINE_TO
+#undef SET_PIXEL_ROP2
+
+#define LINE_TO			LineTo_MASKNOTPEN_16bpp
+#define SET_PIXEL_ROP2		SetPixel_MASKNOTPEN_16bpp
+#include "include/line.c"
+#undef LINE_TO
+#undef SET_PIXEL_ROP2
+
+#define LINE_TO			LineTo_NOTCOPYPEN_16bpp
+#define SET_PIXEL_ROP2		SetPixel_NOTCOPYPEN_16bpp
+#include "include/line.c"
+#undef LINE_TO
+#undef SET_PIXEL_ROP2
+
+#define LINE_TO			LineTo_MASKPENNOT_16bpp
+#define SET_PIXEL_ROP2		SetPixel_MASKPENNOT_16bpp
+#include "include/line.c"
+#undef LINE_TO
+#undef SET_PIXEL_ROP2
+
+#define LINE_TO			LineTo_NOT_16bpp
+#define SET_PIXEL_ROP2		SetPixel_NOT_16bpp
+#include "include/line.c"
+#undef LINE_TO
+#undef SET_PIXEL_ROP2
+
+#define LINE_TO			LineTo_XORPEN_16bpp
+#define SET_PIXEL_ROP2		SetPixel_XORPEN_16bpp
+#include "include/line.c"
+#undef LINE_TO
+#undef SET_PIXEL_ROP2
+
+#define LINE_TO			LineTo_NOTMASKPEN_16bpp
+#define SET_PIXEL_ROP2		SetPixel_NOTMASKPEN_16bpp
+#include "include/line.c"
+#undef LINE_TO
+#undef SET_PIXEL_ROP2
+
+#define LINE_TO			LineTo_MASKPEN_16bpp
+#define SET_PIXEL_ROP2		SetPixel_MASKPEN_16bpp
+#include "include/line.c"
+#undef LINE_TO
+#undef SET_PIXEL_ROP2
+
+#define LINE_TO			LineTo_NOTXORPEN_16bpp
+#define SET_PIXEL_ROP2		SetPixel_NOTXORPEN_16bpp
+#include "include/line.c"
+#undef LINE_TO
+#undef SET_PIXEL_ROP2
+
+#define LINE_TO			LineTo_NOP_16bpp
+#define SET_PIXEL_ROP2		SetPixel_NOP_16bpp
+#include "include/line.c"
+#undef LINE_TO
+#undef SET_PIXEL_ROP2
+
+#define LINE_TO			LineTo_MERGENOTPEN_16bpp
+#define SET_PIXEL_ROP2		SetPixel_MERGENOTPEN_16bpp
+#include "include/line.c"
+#undef LINE_TO
+#undef SET_PIXEL_ROP2
+
+#define LINE_TO			LineTo_COPYPEN_16bpp
+#define SET_PIXEL_ROP2		SetPixel_COPYPEN_16bpp
+#include "include/line.c"
+#undef LINE_TO
+#undef SET_PIXEL_ROP2
+
+#define LINE_TO			LineTo_MERGEPENNOT_16bpp
+#define SET_PIXEL_ROP2		SetPixel_MERGEPENNOT_16bpp
+#include "include/line.c"
+#undef LINE_TO
+#undef SET_PIXEL_ROP2
+
+#define LINE_TO			LineTo_MERGEPEN_16bpp
+#define SET_PIXEL_ROP2		SetPixel_MERGEPEN_16bpp
+#include "include/line.c"
+#undef LINE_TO
+#undef SET_PIXEL_ROP2
+
+#define LINE_TO			LineTo_WHITE_16bpp
+#define SET_PIXEL_ROP2		SetPixel_WHITE_16bpp
+#include "include/line.c"
+#undef LINE_TO
+#undef SET_PIXEL_ROP2
+
+#undef PIXEL_TYPE
+#undef GDI_GET_POINTER
+#undef GDI_GET_PEN_COLOR
+
+pLineTo_16bpp LineTo_ROP2_16bpp[32] =
 {
-	SetPixel_BLACK_16bpp,
-	SetPixel_NOTMERGEPEN_16bpp,
-	SetPixel_MASKNOTPEN_16bpp,
-	SetPixel_NOTCOPYPEN_16bpp,
-	SetPixel_MASKPENNOT_16bpp,
-	SetPixel_NOT_16bpp,
-	SetPixel_XORPEN_16bpp,
-	SetPixel_NOTMASKPEN_16bpp,
-	SetPixel_MASKPEN_16bpp,
-	SetPixel_NOTXORPEN_16bpp,
-	SetPixel_NOP_16bpp,
-	SetPixel_MERGENOTPEN_16bpp,
-	SetPixel_COPYPEN_16bpp,
-	SetPixel_MERGEPENNOT_16bpp,
-	SetPixel_MERGEPEN_16bpp,
-	SetPixel_WHITE_16bpp
+	LineTo_BLACK_16bpp,
+	LineTo_NOTMERGEPEN_16bpp,
+	LineTo_MASKNOTPEN_16bpp,
+	LineTo_NOTCOPYPEN_16bpp,
+	LineTo_MASKPENNOT_16bpp,
+	LineTo_NOT_16bpp,
+	LineTo_XORPEN_16bpp,
+	LineTo_NOTMASKPEN_16bpp,
+	LineTo_MASKPEN_16bpp,
+	LineTo_NOTXORPEN_16bpp,
+	LineTo_NOP_16bpp,
+	LineTo_MERGENOTPEN_16bpp,
+	LineTo_COPYPEN_16bpp,
+	LineTo_MERGEPENNOT_16bpp,
+	LineTo_MERGEPEN_16bpp,
+	LineTo_WHITE_16bpp
 };
 
 int LineTo_16bpp(HGDI_DC hdc, int nXEnd, int nYEnd)
 {
-	int x, y;
-	int x1, y1;
-	int x2, y2;
-	int e, e2;
-	int dx, dy;
-	int sx, sy;
-	HGDI_BITMAP bmp;
-	int bx1, by1;
-	int bx2, by2;
+	pLineTo_16bpp _LineTo;
+	int rop2 = gdi_GetROP2(hdc) - 1;
 
-	int irop2;
-	uint16 pen;
-	uint16 *pixel;
+	_LineTo = LineTo_ROP2_16bpp[rop2];
 
-	x1 = hdc->pen->posX;
-	y1 = hdc->pen->posY;
-	x2 = nXEnd;
-	y2 = nYEnd;
-
-	dx = (x1 > x2) ? x1 - x2 : x2 - x1;
-	dy = (y1 > y2) ? y1 - y2 : y2 - y1;
-
-	sx = (x1 < x2) ? 1 : -1;
-	sy = (y1 < y2) ? 1 : -1;
-
-	e = dx - dy;
-
-	x = x1;
-	y = y1;
-
-	irop2 = gdi_GetROP2(hdc) - 1;
-	bmp = (HGDI_BITMAP) hdc->selectedObject;
-
-	if (hdc->clip->null)
-	{
-		bx1 = (x1 < x2) ? x1 : x2;
-		by1 = (y1 < y2) ? y1 : y2;
-		bx2 = (x1 > x2) ? x1 : x2;
-		by2 = (y1 > y2) ? y1 : y2;
-	}
+	if (_LineTo != NULL)
+		return _LineTo(hdc, nXEnd, nYEnd);
 	else
-	{
-		bx1 = hdc->clip->x;
-		by1 = hdc->clip->y;
-		bx2 = bx1 + hdc->clip->w - 1;
-		by2 = by1 + hdc->clip->h - 1;
-	}
-
-	pen = gdi_GetPenColor_16bpp(hdc->pen);
-
-	while (1)
-	{
-		if (!(x == x2 && y == y2))
-		{
-			if ((x >= bx1 && x <= bx2) && (y >= by1 && y <= by2))
-			{
-				pixel = gdi_GetPointer_16bpp(bmp, x, y);
-				SetPixel16_ROP2_[irop2](pixel, &pen);
-			}
-		}
-		else
-		{
-			break;
-		}
-
-		e2 = 2 * e;
-
-		if (e2 > -dy)
-		{
-			e -= dy;
-			x += sx;
-		}
-
-		if (e2 < dx)
-		{
-			e += dx;
-			y += sy;
-		}
-	}
-
-	return 1;
+		return 0;
 }

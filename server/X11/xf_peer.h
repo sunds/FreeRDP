@@ -28,25 +28,26 @@
 #include <freerdp/utils/stream.h>
 #include <freerdp/utils/stopwatch.h>
 
+typedef struct xf_peer_context xfPeerContext;
+
 #include "xfreerdp.h"
 
 struct xf_peer_context
 {
 	rdpContext _p;
 
-	HGDI_DC hdc;
+	int fps;
 	STREAM* s;
+	HGDI_DC hdc;
 	xfInfo* info;
-	int pipe_fd[2];
-	boolean activated;
-	RFX_CONTEXT* rfx_context;
-	uint8* capture_buffer;
-	pthread_t thread;
 	int activations;
-	STOPWATCH* stopwatch;
+	pthread_t thread;
+	boolean activated;
 	pthread_mutex_t mutex;
+	RFX_CONTEXT* rfx_context;
+	xfEventQueue* event_queue;
+	pthread_t frame_rate_thread;
 };
-typedef struct xf_peer_context xfPeerContext;
 
 void xf_peer_accepted(freerdp_listener* instance, freerdp_peer* client);
 

@@ -32,7 +32,7 @@
 #define MINMAX(_v,_l,_h) ((_v) < (_l) ? (_l) : ((_v) > (_h) ? (_h) : (_v)))
 
 static void rfx_encode_format_rgb(const uint8* rgb_data, int width, int height, int rowstride,
-	RFX_PIXEL_FORMAT pixel_format, const uint8* palette, sint16* r_buf, sint16* g_buf, sint16* b_buf)
+	RDP_PIXEL_FORMAT pixel_format, const uint8* palette, sint16* r_buf, sint16* g_buf, sint16* b_buf)
 {
 	int x, y;
 	int x_exceed;
@@ -43,13 +43,14 @@ static void rfx_encode_format_rgb(const uint8* rgb_data, int width, int height, 
 
 	x_exceed = 64 - width;
 	y_exceed = 64 - height;
+
 	for (y = 0; y < height; y++)
 	{
 		src = rgb_data + y * rowstride;
 
 		switch (pixel_format)
 		{
-			case RFX_PIXEL_FORMAT_BGRA:
+			case RDP_PIXEL_FORMAT_B8G8R8A8:
 				for (x = 0; x < width; x++)
 				{
 					*b_buf++ = (sint16) (*src++);
@@ -58,7 +59,7 @@ static void rfx_encode_format_rgb(const uint8* rgb_data, int width, int height, 
 					src++;
 				}
 				break;
-			case RFX_PIXEL_FORMAT_RGBA:
+			case RDP_PIXEL_FORMAT_R8G8B8A8:
 				for (x = 0; x < width; x++)
 				{
 					*r_buf++ = (sint16) (*src++);
@@ -67,7 +68,7 @@ static void rfx_encode_format_rgb(const uint8* rgb_data, int width, int height, 
 					src++;
 				}
 				break;
-			case RFX_PIXEL_FORMAT_BGR:
+			case RDP_PIXEL_FORMAT_B8G8R8:
 				for (x = 0; x < width; x++)
 				{
 					*b_buf++ = (sint16) (*src++);
@@ -75,7 +76,7 @@ static void rfx_encode_format_rgb(const uint8* rgb_data, int width, int height, 
 					*r_buf++ = (sint16) (*src++);
 				}
 				break;
-			case RFX_PIXEL_FORMAT_RGB:
+			case RDP_PIXEL_FORMAT_R8G8B8:
 				for (x = 0; x < width; x++)
 				{
 					*r_buf++ = (sint16) (*src++);
@@ -83,7 +84,7 @@ static void rfx_encode_format_rgb(const uint8* rgb_data, int width, int height, 
 					*b_buf++ = (sint16) (*src++);
 				}
 				break;
-			case RFX_PIXEL_FORMAT_BGR565_LE:
+			case RDP_PIXEL_FORMAT_B5G6R5_LE:
 				for (x = 0; x < width; x++)
 				{
 					*b_buf++ = (sint16) (((*(src + 1)) & 0xF8) | ((*(src + 1)) >> 5));
@@ -92,7 +93,7 @@ static void rfx_encode_format_rgb(const uint8* rgb_data, int width, int height, 
 					src += 2;
 				}
 				break;
-			case RFX_PIXEL_FORMAT_RGB565_LE:
+			case RDP_PIXEL_FORMAT_R5G6B5_LE:
 				for (x = 0; x < width; x++)
 				{
 					*r_buf++ = (sint16) (((*(src + 1)) & 0xF8) | ((*(src + 1)) >> 5));
@@ -101,7 +102,7 @@ static void rfx_encode_format_rgb(const uint8* rgb_data, int width, int height, 
 					src += 2;
 				}
 				break;
-			case RFX_PIXEL_FORMAT_PALETTE4_PLANER:
+			case RDP_PIXEL_FORMAT_P4_PLANER:
 				if (!palette)
 					break;
 				for (x = 0; x < width; x++)
@@ -122,7 +123,7 @@ static void rfx_encode_format_rgb(const uint8* rgb_data, int width, int height, 
 						src += 4;
 				}
 				break;
-			case RFX_PIXEL_FORMAT_PALETTE8:
+			case RDP_PIXEL_FORMAT_P8:
 				if (!palette)
 					break;
 				for (x = 0; x < width; x++)
@@ -144,6 +145,7 @@ static void rfx_encode_format_rgb(const uint8* rgb_data, int width, int height, 
 			r = *(r_buf - 1);
 			g = *(g_buf - 1);
 			b = *(b_buf - 1);
+
 			for (x = 0; x < x_exceed; x++)
 			{
 				*r_buf++ = r;
@@ -159,6 +161,7 @@ static void rfx_encode_format_rgb(const uint8* rgb_data, int width, int height, 
 		r_last = r_buf - 64;
 		g_last = g_buf - 64;
 		b_last = b_buf - 64;
+
 		while (y_exceed > 0)
 		{
 			memcpy(r_buf, r_last, 64 * sizeof(sint16));
@@ -174,18 +177,18 @@ static void rfx_encode_format_rgb(const uint8* rgb_data, int width, int height, 
 
 void rfx_encode_rgb_to_ycbcr(sint16* y_r_buf, sint16* cb_g_buf, sint16* cr_b_buf)
 {
-	// sint32 is used intentionally because we calculate with shifted factors!
-	sint32 y, cb, cr;
-	sint32 r, g, b;
+	/* sint32 is used intentionally because we calculate with shifted factors! */
 	int i;
+	sint32 r, g, b;
+	sint32 y, cb, cr;
 
 	/**
-	 * The encoded YCbCr coeffectients are represented as 11.5 fixed-point numbers:
+	 * The encoded YCbCr coefficients are represented as 11.5 fixed-point numbers:
 	 *
 	 * 1 sign bit + 10 integer bits + 5 fractional bits
 	 *
 	 * However only 7 integer bits will be actually used since the value range is [-128.0, 127.0].
-	 * In other words, the encoded coeffectients is scaled by << 5 when intepreted as sint16.
+	 * In other words, the encoded coefficients is scaled by << 5 when interpreted as sint16.
 	 * It will be scaled down to original during the quantization phase.
 	 */
 	for (i = 0; i < 4096; i++)
@@ -204,9 +207,9 @@ void rfx_encode_rgb_to_ycbcr(sint16* y_r_buf, sint16* cb_g_buf, sint16* cr_b_buf
 		 * Cr: 0.499813 << 15 = 16377, 0.418531 << 15 = 13714, 0.081282 << 15 = 2663
 		 */
 
-		y  = (r*9798 + g*19235 + b*3735)>>10;
-		cb = (r*-5535 + g*-10868 + b*16403)>>10;
-		cr = (r*16377 + g*-13714 + b*-2663)>>10;
+		y  = (r *  9798 + g *  19235 + b *  3735) >> 10;
+		cb = (r * -5535 + g * -10868 + b * 16403) >> 10;
+		cr = (r * 16377 + g * -13714 + b * -2663) >> 10;
 
 		y_r_buf[i] = MINMAX(y - 4096, -4096, 4095);
 		cb_g_buf[i] = MINMAX(cb, -4096, 4095);

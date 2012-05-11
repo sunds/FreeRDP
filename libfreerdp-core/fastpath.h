@@ -25,10 +25,22 @@
 
 typedef struct rdp_fastpath rdpFastPath;
 
+enum FASTPATH_INPUT_ACTION_TYPE
+{
+	FASTPATH_INPUT_ACTION_FASTPATH = 0x0,
+	FASTPATH_INPUT_ACTION_X224 = 0x3
+};
+
 enum FASTPATH_OUTPUT_ACTION_TYPE
 {
 	FASTPATH_OUTPUT_ACTION_FASTPATH = 0x0,
 	FASTPATH_OUTPUT_ACTION_X224 = 0x3
+};
+
+enum FASTPATH_INPUT_ENCRYPTION_FLAGS
+{
+	FASTPATH_INPUT_SECURE_CHECKSUM = 0x1,
+	FASTPATH_INPUT_ENCRYPTED = 0x2
 };
 
 enum FASTPATH_OUTPUT_ENCRYPTION_FLAGS
@@ -90,6 +102,7 @@ struct rdp_fastpath
 	STREAM* updateData;
 };
 
+uint16 fastpath_header_length(STREAM* s);
 uint16 fastpath_read_header(rdpFastPath* fastpath, STREAM* s);
 uint16 fastpath_read_header_rdp(rdpFastPath* fastpath, STREAM* s);
 boolean fastpath_recv_updates(rdpFastPath* fastpath, STREAM* s);

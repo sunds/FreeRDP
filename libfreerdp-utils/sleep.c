@@ -17,6 +17,7 @@
  * limitations under the License.
  */
 
+#include <winpr/windows.h>
 #include <freerdp/utils/sleep.h>
 
 #include <time.h>
@@ -24,8 +25,6 @@
 #ifndef _WIN32
 #define _XOPEN_SOURCE 500
 #include <unistd.h>
-#else
-#include <windows.h>
 #endif
 
 void freerdp_sleep(uint32 seconds)
@@ -53,6 +52,6 @@ void freerdp_usleep(uint32 useconds)
 	{
 		QueryPerformanceCounter((LARGE_INTEGER*) &t2);
 	}
-	while((t2 - t1) < useconds);
+	while ((t2 - t1) < useconds);
 #endif
 }

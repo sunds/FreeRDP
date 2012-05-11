@@ -25,11 +25,12 @@
 
 #ifndef _WIN32
 #include <netdb.h>
-#include <net/if.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include <netinet/in.h>
+#include <net/if.h>
 #else
 #define close(_fd) closesocket(_fd)
 #endif
@@ -152,13 +153,13 @@ static boolean freerdp_listener_get_fds(freerdp_listener* instance, void** rfds,
 
 static boolean freerdp_listener_check_fds(freerdp_listener* instance)
 {
-	rdpListener* listener = (rdpListener*)instance->listener;
-	struct sockaddr_storage peer_addr;
-	socklen_t peer_addr_size;
-	int peer_sockfd;
 	int i;
-	freerdp_peer* client;
 	void* sin_addr;
+	int peer_sockfd;
+	freerdp_peer* client;
+	socklen_t peer_addr_size;
+	struct sockaddr_storage peer_addr;
+	rdpListener* listener = (rdpListener*) instance->listener;
 
 	if (listener->num_sockfds < 1)
 		return false;
@@ -166,12 +167,20 @@ static boolean freerdp_listener_check_fds(freerdp_listener* instance)
 	for (i = 0; i < listener->num_sockfds; i++)
 	{
 		peer_addr_size = sizeof(peer_addr);
-		peer_sockfd = accept(listener->sockfds[i], (struct sockaddr *)&peer_addr, &peer_addr_size);
+		peer_sockfd = accept(listener->sockfds[i], (struct sockaddr*) &peer_addr, &peer_addr_size);
+
 		if (peer_sockfd == -1)
 		{
+#ifdef _WIN32
+			int wsa_error = WSAGetLastError();
+
+			/* No data available */
+			if (wsa_error == WSAEWOULDBLOCK)
+				continue;
+#else
 			if (errno == EAGAIN || errno == EWOULDBLOCK)
 				continue;
-
+#endif
 			perror("accept");
 			return false;
 		}
@@ -179,9 +188,10 @@ static boolean freerdp_listener_check_fds(freerdp_listener* instance)
 		client = freerdp_peer_new(peer_sockfd);
 
 		if (peer_addr.ss_family == AF_INET)
-			sin_addr = &(((struct sockaddr_in*)&peer_addr)->sin_addr);
+			sin_addr = &(((struct sockaddr_in*) &peer_addr)->sin_addr);
 		else
-			sin_addr = &(((struct sockaddr_in6*)&peer_addr)->sin6_addr);
+			sin_addr = &(((struct sockaddr_in6*) &peer_addr)->sin6_addr);
+
 		inet_ntop(peer_addr.ss_family, sin_addr, client->hostname, sizeof(client->hostname));
 
 		IFCALL(instance->PeerAccepted, instance, client);
@@ -204,7 +214,7 @@ freerdp_listener* freerdp_listener_new(void)
 	listener = xnew(rdpListener);
 	listener->instance = instance;
 
-	instance->listener = (void*)listener;
+	instance->listener = (void*) listener;
 
 	return instance;
 }
@@ -213,7 +223,7 @@ void freerdp_listener_free(freerdp_listener* instance)
 {
 	rdpListener* listener;
 
-	listener = (rdpListener*)instance->listener;
+	listener = (rdpListener*) instance->listener;
 	xfree(listener);
 
 	xfree(instance);

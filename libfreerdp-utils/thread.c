@@ -22,8 +22,9 @@
 #include <string.h>
 #include <time.h>
 
+#include <winpr/windows.h>
+
 #ifdef _WIN32
-#include <Windows.h>
 #ifdef _MSC_VER
 #include <process.h>
 #endif

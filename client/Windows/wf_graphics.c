@@ -45,12 +45,12 @@ HBITMAP wf_create_dib(wfInfo* wfi, int width, int height, int bpp, uint8* data, 
 	bmi.bmiHeader.biWidth = width;
 	bmi.bmiHeader.biHeight = negHeight;
 	bmi.bmiHeader.biPlanes = 1;
-	bmi.bmiHeader.biBitCount = 24;
+	bmi.bmiHeader.biBitCount = bpp;
 	bmi.bmiHeader.biCompression = BI_RGB;
 	bitmap = CreateDIBSection(hdc, &bmi, DIB_RGB_COLORS, (void**) &cdata, NULL, 0);
 
 	if (data != NULL)
-		freerdp_image_convert(data, cdata, width, height, bpp, 24, wfi->clrconv);
+		freerdp_image_convert(data, cdata, width, height, bpp, bpp, wfi->clrconv);
 
 	if (pdata != NULL)
 		*pdata = cdata;
@@ -216,6 +216,16 @@ void wf_Pointer_Set(rdpContext* context, rdpPointer* pointer)
 
 }
 
+void wf_Pointer_SetNull(rdpContext* context)
+{
+
+}
+
+void wf_Pointer_SetDefault(rdpContext* context)
+{
+
+}
+
 /* Graphics Module */
 
 void wf_register_graphics(rdpGraphics* graphics)
@@ -236,6 +246,8 @@ void wf_register_graphics(rdpGraphics* graphics)
 	pointer.New = wf_Pointer_New;
 	pointer.Free = wf_Pointer_Free;
 	pointer.Set = wf_Pointer_Set;
+	pointer.SetNull = wf_Pointer_SetNull;
+	pointer.SetDefault = wf_Pointer_SetDefault;
 
 	graphics_register_bitmap(graphics, &bitmap);
 	graphics_register_pointer(graphics, &pointer);

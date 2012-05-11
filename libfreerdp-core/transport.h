@@ -24,14 +24,17 @@ typedef enum
 {
 	TRANSPORT_LAYER_TCP,
 	TRANSPORT_LAYER_TLS,
+	TRANSPORT_LAYER_TSG,
 	TRANSPORT_LAYER_CLOSED
 } TRANSPORT_LAYER;
 
 typedef struct rdp_transport rdpTransport;
 
 #include "tcp.h"
-#include "tls.h"
-#include "credssp.h"
+#include "tsg.h"
+
+#include <winpr/sspi.h>
+#include <freerdp/crypto/tls.h>
 
 #include <time.h>
 #include <freerdp/types.h>
@@ -48,14 +51,20 @@ struct rdp_transport
 	TRANSPORT_LAYER layer;
 	struct rdp_tcp* tcp;
 	struct rdp_tls* tls;
-	struct rdp_settings* settings;
+	struct rdp_tsg* tsg;
+	struct rdp_tcp* tcp_in;
+	struct rdp_tcp* tcp_out;
+	struct rdp_tls* tls_in;
+	struct rdp_tls* tls_out;
 	struct rdp_credssp* credssp;
+	struct rdp_settings* settings;
 	uint32 usleep_interval;
 	void* recv_extra;
 	STREAM* recv_buffer;
 	TransportRecv recv_callback;
 	struct wait_obj* recv_event;
 	boolean blocking;
+	boolean process_single_pdu; /* process single pdu in transport_check_fds */
 };
 
 STREAM* transport_recv_stream_init(rdpTransport* transport, int size);
@@ -66,13 +75,14 @@ boolean transport_disconnect(rdpTransport* transport);
 boolean transport_connect_rdp(rdpTransport* transport);
 boolean transport_connect_tls(rdpTransport* transport);
 boolean transport_connect_nla(rdpTransport* transport);
+boolean transport_connect_tsg(rdpTransport* transport);
 boolean transport_accept_rdp(rdpTransport* transport);
 boolean transport_accept_tls(rdpTransport* transport);
 boolean transport_accept_nla(rdpTransport* transport);
 int transport_read(rdpTransport* transport, STREAM* s);
 int transport_write(rdpTransport* transport, STREAM* s);
 void transport_get_fds(rdpTransport* transport, void** rfds, int* rcount);
-int transport_check_fds(rdpTransport* transport);
+int transport_check_fds(rdpTransport** ptransport);
 boolean transport_set_blocking_mode(rdpTransport* transport, boolean blocking);
 rdpTransport* transport_new(rdpSettings* settings);
 void transport_free(rdpTransport* transport);

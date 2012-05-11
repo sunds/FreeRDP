@@ -20,6 +20,7 @@
 #ifndef __RDP_H
 #define __RDP_H
 
+#include "config.h"
 #include "mcs.h"
 #include "tpkt.h"
 #include "fastpath.h"
@@ -36,12 +37,13 @@
 #include "redirection.h"
 #include "capabilities.h"
 #include "channel.h"
-#include "mppc.h"
 
 #include <freerdp/freerdp.h>
 #include <freerdp/settings.h>
 #include <freerdp/utils/debug.h>
 #include <freerdp/utils/stream.h>
+#include <freerdp/codec/mppc_dec.h>
+#include <freerdp/codec/mppc_enc.h>
 
 /* Security Header Flags */
 #define SEC_EXCHANGE_PKT		0x0001
@@ -63,7 +65,7 @@
 #define RDP_SECURITY_HEADER_LENGTH	4
 #define RDP_SHARE_CONTROL_HEADER_LENGTH	6
 #define RDP_SHARE_DATA_HEADER_LENGTH	12
-#define RDP_PACKET_HEADER_LENGTH	(TPDU_DATA_LENGTH + MCS_SEND_DATA_HEADER_LENGTH)
+#define RDP_PACKET_HEADER_MAX_LENGTH	(TPDU_DATA_LENGTH + MCS_SEND_DATA_HEADER_MAX_LENGTH)
 
 #define PDU_TYPE_DEMAND_ACTIVE		0x1
 #define PDU_TYPE_CONFIRM_ACTIVE		0x3
@@ -103,16 +105,6 @@
 #define DATA_PDU_TYPE_STATUS_INFO				0x36
 #define DATA_PDU_TYPE_MONITOR_LAYOUT				0x37
 
-/* Compression Types */
-#define PACKET_COMPRESSED		0x20
-#define PACKET_AT_FRONT			0x40
-#define PACKET_FLUSHED			0x80
-#define PACKET_COMPR_TYPE_8K		0x00
-#define PACKET_COMPR_TYPE_64K		0x01
-#define PACKET_COMPR_TYPE_RDP6		0x02
-#define PACKET_COMPR_TYPE_RDP61		0x03
-#define CompressionTypeMask		0x0F
-
 /* Stream Identifiers */
 #define STREAM_UNDEFINED		0x00
 #define STREAM_LOW			0x01
@@ -133,16 +125,20 @@ struct rdp_rdp
 	struct rdp_settings* settings;
 	struct rdp_transport* transport;
 	struct rdp_extension* extension;
-	struct rdp_mppc* mppc;
+	struct rdp_mppc_dec* mppc_dec;
+	struct rdp_mppc_enc* mppc_enc;
 	struct crypto_rc4_struct* rc4_decrypt_key;
 	int decrypt_use_count;
+	int decrypt_checksum_use_count;
 	struct crypto_rc4_struct* rc4_encrypt_key;
 	int encrypt_use_count;
+	int encrypt_checksum_use_count;
 	struct crypto_des3_struct* fips_encrypt;
 	struct crypto_des3_struct* fips_decrypt;
 	struct crypto_hmac_struct* fips_hmac;
 	uint32 sec_flags;
 	boolean do_crypt;
+	boolean do_secure_checksum;
 	uint8 sign_key[16];
 	uint8 decrypt_key[16];
 	uint8 encrypt_key[16];
@@ -154,6 +150,7 @@ struct rdp_rdp
 	uint8 fips_decrypt_key[24];
 	uint32 errorInfo;
 	uint32 finalize_sc_pdus;
+	boolean disconnect;
 };
 
 void rdp_read_security_header(STREAM* s, uint16* flags);
@@ -177,7 +174,7 @@ boolean rdp_send_pdu(rdpRdp* rdp, STREAM* s, uint16 type, uint16 channel_id);
 
 STREAM* rdp_data_pdu_init(rdpRdp* rdp);
 boolean rdp_send_data_pdu(rdpRdp* rdp, STREAM* s, uint8 type, uint16 channel_id);
-void rdp_recv_data_pdu(rdpRdp* rdp, STREAM* s);
+boolean rdp_recv_data_pdu(rdpRdp* rdp, STREAM* s);
 
 boolean rdp_send(rdpRdp* rdp, STREAM* s, uint16 channel_id);
 void rdp_recv(rdpRdp* rdp);
@@ -198,6 +195,6 @@ void rdp_free(rdpRdp* rdp);
 #define DEBUG_RDP(fmt, ...) DEBUG_NULL(fmt, ## __VA_ARGS__)
 #endif
 
-boolean rdp_decrypt(rdpRdp* rdp, STREAM* s, int length);
+boolean rdp_decrypt(rdpRdp* rdp, STREAM* s, int length, uint16 securityFlags);
 
 #endif /* __RDP_H */

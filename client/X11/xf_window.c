@@ -206,6 +206,8 @@ void xf_SetWindowDecorations(xfInfo* xfi, xfWindow* window, boolean show)
 	hints.decorations = (show) ? MWM_DECOR_ALL : 0;
 	hints.functions = MWM_FUNC_ALL ; 
 	hints.flags = MWM_HINTS_DECORATIONS | MWM_HINTS_FUNCTIONS;
+	hints.inputMode = 0;
+	hints.status = 0;
 
 	XChangeProperty(xfi->display, window->handle, xfi->_MOTIF_WM_HINTS, xfi->_MOTIF_WM_HINTS, 32,
 		PropModeReplace, (uint8*) &hints, PROP_MOTIF_WM_HINTS_ELEMENTS);
@@ -258,9 +260,15 @@ void xf_SetWindowStyle(xfInfo* xfi, xfWindow* window, uint32 style, uint32 ex_st
 
 }
 
+void xf_SetWindowText(xfInfo *xfi, xfWindow* window, char *name)
+{
+	XStoreName(xfi->display, window->handle, name);
+}
+
 xfWindow* xf_CreateDesktopWindow(xfInfo* xfi, char* name, int width, int height, boolean decorations)
 {
 	xfWindow* window;
+	XEvent xevent;
 
 	window = (xfWindow*) xzalloc(sizeof(xfWindow));
 
@@ -304,13 +312,25 @@ xfWindow* xf_CreateDesktopWindow(xfInfo* xfi, char* name, int width, int height,
 			input_mask |= EnterWindowMask | LeaveWindowMask;
 
 		XChangeProperty(xfi->display, window->handle, xfi->_NET_WM_ICON, XA_CARDINAL, 32,
-				PropModeReplace, (uint8*) xf_icon_prop, sizeof(xf_icon_prop) / sizeof(long));
+				PropModeReplace, (uint8*) xf_icon_prop, ARRAY_SIZE(xf_icon_prop));
+
+		if (xfi->parent_window)
+                        XReparentWindow(xfi->display, window->handle, xfi->parent_window, 0, 0);
 
 		XSelectInput(xfi->display, window->handle, input_mask);
 		XMapWindow(xfi->display, window->handle);
+
+		//NOTE: This must be done here to handle reparenting the window, so that we dont miss the event and hang waiting for the next one
+        	/* wait for VisibilityNotify */
+        	do
+        	{
+        	      XMaskEvent(xfi->display, VisibilityChangeMask, &xevent);
+        	}
+        	while (xevent.type != VisibilityNotify);
 	}
 
-	XStoreName(xfi->display, window->handle, name);
+	xf_SetWindowText(xfi, window, name);
+
 
 	return window;
 }
@@ -327,6 +347,7 @@ void xf_ResizeDesktopWindow(xfInfo* xfi, xfWindow* window, int width, int height
 		size_hints->min_width = size_hints->max_width = xfi->width;
 		size_hints->min_height = size_hints->max_height = xfi->height;
 		XSetWMNormalHints(xfi->display, window->handle, size_hints);
+		XResizeWindow(xfi->display, window->handle, xfi->width, xfi->height);
 		XFree(size_hints);
 	}
 }

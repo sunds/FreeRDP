@@ -1,4 +1,4 @@
-/**
+/*
  * FreeRDP: A Remote Desktop Protocol Client
  * FreeRDP Core
  *
@@ -28,10 +28,25 @@
 #include <freerdp/freerdp.h>
 #include <freerdp/utils/memory.h>
 
+/* connectErrorCode is 'extern' in errorcodes.h. See comment there.*/
+
+/** Creates a new connection based on the settings found in the "instance" parameter
+ *  It will use the callbacks registered on the structure to process the pre/post connect operations
+ *  that the caller requires.
+ *  @see struct rdp_freerdp in freerdp.h
+ *
+ *  @param instance - pointer to a rdp_freerdp structure that contains base information to establish the connection.
+ *  				  On return, this function will be initialized with the new connection's settings.
+ *
+ *  @return true if successful. false otherwise.
+ *
+ */
 boolean freerdp_connect(freerdp* instance)
 {
 	rdpRdp* rdp;
 	boolean status = false;
+	/* We always set the return code to 0 before we start the connect sequence*/
+	connectErrorCode = 0 ;
 
 	rdp = instance->context->rdp;
 
@@ -41,6 +56,9 @@ boolean freerdp_connect(freerdp* instance)
 
 	if (status != true)
 	{
+		if(!connectErrorCode){
+			connectErrorCode = PREECONNECTERROR;
+		}
 		printf("freerdp_pre_connect failed\n");
 		return false;
 	}
@@ -63,6 +81,9 @@ boolean freerdp_connect(freerdp* instance)
 		if (status != true)
 		{
 			printf("freerdp_post_connect failed\n");
+			if(!connectErrorCode){
+				connectErrorCode = POSTCONNECTERROR;
+			}
 			return false;
 		}
 
@@ -98,7 +119,9 @@ boolean freerdp_connect(freerdp* instance)
 			return true;
 		}
 	}
-
+	if(!connectErrorCode){
+		connectErrorCode = UNDEFINEDCONNECTERROR;
+	}
 	return status;
 }
 
@@ -127,11 +150,6 @@ boolean freerdp_check_fds(freerdp* instance)
 	return true;
 }
 
-void freerdp_send_keep_alive(freerdp* instance)
-{
-	input_send_synchronize_event(instance->context->rdp->input, 0);
-}
-
 static int freerdp_send_channel_data(freerdp* instance, int channel_id, uint8* data, int size)
 {
 	return rdp_send_channel_data(instance->context->rdp, channel_id, data, size);
@@ -147,11 +165,39 @@ boolean freerdp_disconnect(freerdp* instance)
 	return true;
 }
 
+boolean freerdp_shall_disconnect(freerdp* instance)
+{
+
+	return instance->context->rdp->disconnect;
+}
+
+void freerdp_get_version(int* major, int* minor, int* revision)
+{
+	if (major != NULL)
+		*major = FREERDP_VERSION_MAJOR;
+
+	if (minor != NULL)
+		*minor = FREERDP_VERSION_MINOR;
+
+	if (revision != NULL)
+		*revision = FREERDP_VERSION_REVISION;
+}
+
+/** Allocator function for a rdp context.
+ *  The function will allocate a rdpRdp structure using rdp_new(), then copy
+ *  its contents to the appropriate fields in the rdp_freerdp structure given in parameters.
+ *  It will also initialize the 'context' field in the rdp_freerdp structure as needed.
+ *  If the caller has set the ContextNew callback in the 'instance' parameter, it will be called at the end of the function.
+ *
+ *  @param instance - Pointer to the rdp_freerdp structure that will be initialized with the new context.
+ */
 void freerdp_context_new(freerdp* instance)
 {
 	rdpRdp* rdp;
 
 	rdp = rdp_new(instance);
+	// FIXME - we're not checking where rdp_new returns NULL, and have no way to report an error to the caller
+
 	instance->input = rdp->input;
 	instance->update = rdp->update;
 	instance->settings = rdp->settings;
@@ -172,9 +218,26 @@ void freerdp_context_new(freerdp* instance)
 	IFCALL(instance->ContextNew, instance, instance->context);
 }
 
+/** Deallocator function for a rdp context.
+ *  The function will deallocate the resources from the 'instance' parameter that were allocated from a call
+ *  to freerdp_context_new().
+ *  If the ContextFree callback is set in the 'instance' parameter, it will be called before deallocation occurs.
+ *
+ *  @param instance - Pointer to the rdp_freerdp structure that was initialized by a call to freerdp_context_new().
+ *  				  On return, the fields associated to the context are invalid.
+ */
 void freerdp_context_free(freerdp* instance)
 {
+	if (instance->context == NULL)
+		return;
+
 	IFCALL(instance->ContextFree, instance, instance->context);
+
+	rdp_free(instance->context->rdp);
+	graphics_free(instance->context->graphics);
+
+	xfree(instance->context);
+	instance->context = NULL;
 }
 
 uint32 freerdp_error_info(freerdp* instance)
@@ -182,6 +245,9 @@ uint32 freerdp_error_info(freerdp* instance)
 	return instance->context->rdp->errorInfo;
 }
 
+/** Allocator function for the rdp_freerdp structure.
+ *  @return an allocated structure filled with 0s. Need to be deallocated using freerdp_free()
+ */
 freerdp* freerdp_new()
 {
 	freerdp* instance;
@@ -197,11 +263,14 @@ freerdp* freerdp_new()
 	return instance;
 }
 
-void freerdp_free(freerdp* freerdp)
+/** Deallocator function for the rdp_freerdp structure.
+ *  @param instance - pointer to the rdp_freerdp structure to deallocate.
+ *                    On return, this pointer is not valid anymore.
+ */
+void freerdp_free(freerdp* instance)
 {
-	if (freerdp)
+	if (instance)
 	{
-		rdp_free(freerdp->context->rdp);
-		xfree(freerdp);
+		xfree(instance);
 	}
 }

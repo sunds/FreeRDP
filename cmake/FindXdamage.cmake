@@ -28,7 +28,7 @@
 # limitations under the License.
 #=============================================================================
 
-find_path(XDAMAGE_INCLUDE_DIR NAMES Xdamage.h
+find_path(XDAMAGE_INCLUDE_DIR NAMES X11/extensions/Xdamage.h
           PATH_SUFFIXES X11/extensions
           DOC "The Xdamage include directory"
 )
@@ -38,11 +38,12 @@ find_library(XDAMAGE_LIBRARY NAMES Xdamage
 )
 
 include(FindPackageHandleStandardArgs)
-FIND_PACKAGE_HANDLE_STANDARD_ARGS(XDAMAGE DEFAULT_MSG XDAMAGE_LIBRARY XDAMAGE_INCLUDE_DIR)
+FIND_PACKAGE_HANDLE_STANDARD_ARGS(Xdamage DEFAULT_MSG XDAMAGE_LIBRARY XDAMAGE_INCLUDE_DIR)
 
 if(XDAMAGE_FOUND)
   set( XDAMAGE_LIBRARIES ${XDAMAGE_LIBRARY} )
   set( XDAMAGE_INCLUDE_DIRS ${XDAMAGE_INCLUDE_DIR} )
 endif()
+
 
 mark_as_advanced(XDAMAGE_INCLUDE_DIR XDAMAGE_LIBRARY)

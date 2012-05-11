@@ -18,6 +18,7 @@
 # limitations under the License.
 
 add_definitions(-DEXT_PATH="/usr/lib/freerdp/extensions")
+
 include_directories(${OPENSSL_INCLUDE_DIR})
 include_directories(${ZLIB_INCLUDE_DIRS})
 
@@ -26,8 +27,6 @@ set(LIBFREERDP_CORE_SRCS
 	activation.h
 	extension.c
 	extension.h
-	ber.c
-	ber.h
 	gcc.c
 	gcc.h
 	mcs.c
@@ -36,14 +35,14 @@ set(LIBFREERDP_CORE_SRCS
 	nego.h
 	info.c
 	info.h
+	http.c
+	http.h
+	rpc.c
+	rpc.h
+	rts.c
+	rts.h
 	input.c
 	input.h
-	crypto.c
-	crypto.h
-	credssp.c
-	credssp.h
-	ntlmssp.c
-	ntlmssp.h
 	license.c
 	license.h
 	errinfo.c
@@ -63,14 +62,14 @@ set(LIBFREERDP_CORE_SRCS
 	connection.h
 	redirection.c
 	redirection.h
+	timezone.c
+	timezone.h
 	rdp.c
 	rdp.h
-	per.c
-	per.h
 	tcp.c
 	tcp.h
-	tls.c
-	tls.h
+	tsg.c
+	tsg.h
 	tpdu.c
 	tpdu.h
 	tpkt.c
@@ -91,7 +90,6 @@ set(LIBFREERDP_CORE_SRCS
 	listener.h
 	peer.c
 	peer.h
-    mppc.c
 )
 
 add_library(freerdp-core ${LIBFREERDP_CORE_SRCS})
@@ -104,8 +102,14 @@ else()
 	target_link_libraries(freerdp-core ${ZLIB_LIBRARIES})	
 endif()
 
-target_link_libraries(freerdp-core ${OPENSSL_LIBRARIES})
 target_link_libraries(freerdp-core freerdp-utils)
 target_link_libraries(freerdp-core freerdp-codec)
+target_link_libraries(freerdp-core freerdp-crypto)
+target_link_libraries(freerdp-core freerdp-locale)
+target_link_libraries(freerdp-core ${OPENSSL_LIBRARIES})
+
+target_link_libraries(freerdp-core winpr-rpc)
+target_link_libraries(freerdp-core winpr-sspi)
 
 install(TARGETS freerdp-core DESTINATION ${CMAKE_INSTALL_LIBDIR})
+

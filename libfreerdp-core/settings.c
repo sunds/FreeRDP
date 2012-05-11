@@ -18,6 +18,7 @@
  */
 
 #include "config.h"
+#include "certificate.h"
 #include "capabilities.h"
 #include <freerdp/utils/memory.h>
 
@@ -26,6 +27,7 @@
 #endif
 
 #include <freerdp/settings.h>
+#include <freerdp/utils/file.h>
 
 static const char client_dll[] = "C:\\Windows\\System32\\mstscax.dll";
 
@@ -51,11 +53,12 @@ rdpSettings* settings_new(void* instance)
 		settings->tls_security = true;
 		settings->rdp_security = true;
 		settings->client_build = 2600;
-		settings->kbd_type = 0;
+		settings->kbd_type = 4; /* @msdn{cc240510} 'IBM enhanced (101- or 102-key) keyboard' */
 		settings->kbd_subtype = 0;
-		settings->kbd_fn_keys = 0;
+		settings->kbd_fn_keys = 12;
 		settings->kbd_layout = 0;
 		settings->encryption = false;
+		settings->salted_checksum = true;
 		settings->port = 3389;
 		settings->desktop_resize = true;
 
@@ -70,6 +73,9 @@ rdpSettings* settings_new(void* instance)
 		settings->encryption_level = ENCRYPTION_LEVEL_NONE;
 
 		settings->authentication = true;
+
+		settings->received_caps = xzalloc(32);
+		settings->order_support = xzalloc(32);
 
 		settings->order_support[NEG_DSTBLT_INDEX] = true;
 		settings->order_support[NEG_PATBLT_INDEX] = true;
@@ -94,6 +100,9 @@ rdpSettings* settings_new(void* instance)
 		settings->order_support[NEG_ELLIPSE_SC_INDEX] = true;
 		settings->order_support[NEG_ELLIPSE_CB_INDEX] = true;
 
+		settings->client_hostname = xzalloc(32);
+		settings->client_product_id = xzalloc(32);
+
 		settings->color_pointer = true;
 		settings->large_pointer = true;
 		settings->pointer_cache_size = 20;
@@ -111,12 +120,15 @@ rdpSettings* settings_new(void* instance)
 
 		settings->bitmap_cache = true;
 		settings->persistent_bitmap_cache = false;
+		settings->bitmapCacheV2CellInfo = xzalloc(sizeof(BITMAP_CACHE_V2_CELL_INFO) * 6);
 
 		settings->refresh_rect = true;
 		settings->suppress_output = true;
 
 		settings->glyph_cache = true;
 		settings->glyphSupportLevel = GLYPH_SUPPORT_NONE;
+		settings->glyphCache = xzalloc(sizeof(GLYPH_CACHE_DEFINITION) * 10);
+		settings->fragCache = xnew(GLYPH_CACHE_DEFINITION);
 		settings->glyphCache[0].cacheEntries = 254;
 		settings->glyphCache[0].cacheMaximumCellSize = 4;
 		settings->glyphCache[1].cacheEntries = 254;
@@ -137,8 +149,8 @@ rdpSettings* settings_new(void* instance)
 		settings->glyphCache[8].cacheMaximumCellSize = 256;
 		settings->glyphCache[9].cacheEntries = 64;
 		settings->glyphCache[9].cacheMaximumCellSize = 256;
-		settings->fragCache.cacheEntries = 256;
-		settings->fragCache.cacheMaximumCellSize = 256;
+		settings->fragCache->cacheEntries = 256;
+		settings->fragCache->cacheMaximumCellSize = 256;
 
 		settings->offscreen_bitmap_cache = true;
 		settings->offscreen_bitmap_cache_size = 7680;
@@ -162,6 +174,15 @@ rdpSettings* settings_new(void* instance)
 		settings->uniconv = freerdp_uniconv_new();
 		gethostname(settings->client_hostname, sizeof(settings->client_hostname) - 1);
 		settings->mouse_motion = true;
+
+		settings->client_auto_reconnect_cookie = xnew(ARC_CS_PRIVATE_PACKET);
+		settings->server_auto_reconnect_cookie = xnew(ARC_SC_PRIVATE_PACKET);
+
+		settings->client_time_zone = xnew(TIME_ZONE_INFO);
+		settings->server_random = xnew(rdpBlob);
+		settings->server_certificate = xnew(rdpBlob);
+
+		freerdp_detect_paths(settings);
 	}
 
 	return settings;
@@ -182,8 +203,26 @@ void settings_free(rdpSettings* settings)
 		xfree(settings->client_dir);
 		xfree(settings->cert_file);
 		xfree(settings->privatekey_file);
-		freerdp_blob_free(&(settings->server_certificate));
+		xfree(settings->received_caps);
+		xfree(settings->order_support);
+		xfree(settings->client_hostname);
+		xfree(settings->client_product_id);
+		freerdp_blob_free(settings->server_random);
+		freerdp_blob_free(settings->server_certificate);
+		xfree(settings->server_random);
+		xfree(settings->server_certificate);
+		xfree(settings->rdp_key_file);
 		certificate_free(settings->server_cert);
+		xfree(settings->client_auto_reconnect_cookie);
+		xfree(settings->server_auto_reconnect_cookie);
+		xfree(settings->client_time_zone);
+		xfree(settings->bitmapCacheV2CellInfo);
+		xfree(settings->glyphCache);
+		xfree(settings->fragCache);
+		key_free(settings->server_key);
+		xfree(settings->config_path);
+		xfree(settings->current_path);
+		xfree(settings->development_path);
 		xfree(settings);
 	}
 }

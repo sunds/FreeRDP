@@ -17,6 +17,7 @@
  * limitations under the License.
  */
 
+#include <winpr/windows.h>
 #include <freerdp/utils/memory.h>
 #include <freerdp/utils/semaphore.h>
 
@@ -31,7 +32,6 @@
 
 #elif defined _WIN32
 
-#include <windows.h>
 #define freerdp_sem_t HANDLE
 
 #else

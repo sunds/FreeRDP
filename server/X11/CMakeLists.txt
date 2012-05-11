@@ -21,38 +21,40 @@ include_directories(${X11_INCLUDE_DIRS})
 
 add_executable(xfreerdp-server
 	xf_peer.c
+	xf_event.c
+	xf_input.c
 	xf_encode.c
 	xfreerdp.c)
 
 find_suggested_package(XShm)
-if(XSHM_FOUND)
+if(WITH_XSHM)
 	add_definitions(-DWITH_XSHM)
 	include_directories(${XSHM_INCLUDE_DIRS})
 endif()
 
 find_suggested_package(Xext)
-if(XEXT_FOUND)
+if(WITH_XEXT)
 	add_definitions(-DWITH_XEXT)
 	include_directories(${XEXT_INCLUDE_DIRS})
 	target_link_libraries(xfreerdp-server ${XEXT_LIBRARIES})
 endif()
 
 find_suggested_package(Xdamage)
-if(XDAMAGE_FOUND)
+if(WITH_XDAMAGE)
         add_definitions(-DWITH_XDAMAGE)
         include_directories(${XDAMAGE_INCLUDE_DIRS})
         target_link_libraries(xfreerdp-server ${XDAMAGE_LIBRARIES})
 endif()
 
 find_suggested_package(Xfixes)
-if(XFIXES_FOUND)
+if(WITH_XFIXES)
         add_definitions(-DWITH_XFIXES)
         include_directories(${XFIXES_INCLUDE_DIRS})
         target_link_libraries(xfreerdp-server ${XFIXES_LIBRARIES})
 endif()
 
 find_suggested_package(XTest)
-if(XTEST_FOUND)
+if(WITH_XTEST)
         add_definitions(-DWITH_XTEST)
         include_directories(${XTEST_INCLUDE_DIRS})
         target_link_libraries(xfreerdp-server ${XTEST_LIBRARIES})
@@ -62,5 +64,7 @@ target_link_libraries(xfreerdp-server freerdp-core)
 target_link_libraries(xfreerdp-server freerdp-codec)
 target_link_libraries(xfreerdp-server freerdp-utils)
 target_link_libraries(xfreerdp-server freerdp-gdi)
-target_link_libraries(xfreerdp-server freerdp-kbd)
+target_link_libraries(xfreerdp-server freerdp-crypto)
+target_link_libraries(xfreerdp-server freerdp-locale)
 target_link_libraries(xfreerdp-server ${X11_LIBRARIES})
+target_link_libraries(xfreerdp-server winpr-sspi)

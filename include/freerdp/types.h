@@ -22,7 +22,7 @@
 #define __RDP_TYPES_H
 
 #ifdef _WIN32
-#include <WinDef.h>
+#include <windef.h>
 #endif
 
 /* Base Types */
@@ -68,7 +68,12 @@ typedef signed long long sint64;
 #ifdef HAVE_STDBOOL_H
 
 #include <stdbool.h>
+
+#ifdef _WIN32
+#define boolean BOOLEAN
+#else
 typedef int boolean;
+#endif
 
 #else
 
@@ -88,7 +93,7 @@ typedef int boolean;
 
 #endif /* __bool_true_false_are_defined */
 
-#else
+#else /* ifdef __cplusplus */
 
 #ifndef true
 #define true	1
@@ -113,6 +118,16 @@ typedef int boolean;
 #endif
 
 #include <freerdp/settings.h>
+
+typedef struct
+{
+	uint32 time_low;
+	uint16 time_mid;
+	uint16 time_hi_and_version;
+	uint8 clock_seq_hi_and_reserved;
+	uint8 clock_seq_low;
+	uint8 node[6];
+} uuid;
 
 struct _RDP_PLUGIN_DATA
 {

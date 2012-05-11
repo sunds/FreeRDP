@@ -165,6 +165,7 @@ void nego_attempt_nla(rdpNego* nego)
 		return;
 	}
 
+	DEBUG_NEGO("state: %s", NEGO_STATE_STRINGS[nego->state]);
 	if (nego->state != NEGO_STATE_FINAL)
 	{
 		nego_tcp_disconnect(nego);
@@ -256,8 +257,10 @@ void nego_attempt_rdp(rdpNego* nego)
 boolean nego_recv_response(rdpNego* nego)
 {
 	STREAM* s = transport_recv_stream_init(nego->transport, 1024);
+
 	if (transport_read(nego->transport, s) < 0)
 		return false;
+
 	return nego_recv(nego->transport, s, nego->transport->recv_extra);
 }
 
@@ -290,6 +293,19 @@ boolean nego_recv(rdpTransport* transport, STREAM* s, void* extra)
 		{
 			case TYPE_RDP_NEG_RSP:
 				nego_process_negotiation_response(nego, s);
+
+				DEBUG_NEGO("selected_protocol: %d", nego->selected_protocol);
+
+				/* enhanced security selected ? */
+				if (nego->selected_protocol) {
+					if (nego->selected_protocol == PROTOCOL_NLA &&
+						!nego->enabled_protocols[PROTOCOL_NLA]) 
+						nego->state = NEGO_STATE_FAIL;
+					if (nego->selected_protocol == PROTOCOL_TLS &&
+						!nego->enabled_protocols[PROTOCOL_TLS]) 
+						nego->state = NEGO_STATE_FAIL;
+				} else if (!nego->enabled_protocols[PROTOCOL_RDP])
+					nego->state = NEGO_STATE_FAIL;
 				break;
 
 			case TYPE_RDP_NEG_FAILURE:
@@ -299,7 +315,11 @@ boolean nego_recv(rdpTransport* transport, STREAM* s, void* extra)
 	}
 	else
 	{
-		nego->state = NEGO_STATE_FINAL;
+		DEBUG_NEGO("no rdpNegData");
+		if (!nego->enabled_protocols[PROTOCOL_RDP])
+			nego->state = NEGO_STATE_FAIL;
+		else
+			nego->state = NEGO_STATE_FINAL;
 	}
 
 	return true;
@@ -319,6 +339,7 @@ boolean nego_read_request(rdpNego* nego, STREAM* s)
 
 	tpkt_read_header(s);
 	li = tpdu_read_connection_request(s);
+
 	if (li != stream_get_left(s) + 6)
 	{
 		printf("Incorrect TPDU length indicator.\n");
@@ -403,12 +424,13 @@ boolean nego_send_negotiation_request(rdpNego* nego)
 	{
 		int cookie_length = strlen(nego->cookie);
 		stream_write(s, "Cookie: mstshash=", 17);
-		stream_write(s, (uint8*)nego->cookie, cookie_length);
+		stream_write(s, (uint8*) nego->cookie, cookie_length);
 		stream_write_uint8(s, 0x0D); /* CR */
 		stream_write_uint8(s, 0x0A); /* LF */
 		length += cookie_length + 19;
 	}
 
+	DEBUG_NEGO("requested_protocols: %d", nego->requested_protocols);
 	if (nego->requested_protocols > PROTOCOL_RDP)
 	{
 		/* RDP_NEG_DATA must be present for TLS and NLA */
@@ -521,8 +543,13 @@ void nego_process_negotiation_failure(rdpNego* nego, STREAM* s)
 boolean nego_send_negotiation_response(rdpNego* nego)
 {
 	STREAM* s;
+	rdpSettings* settings;
 	int length;
 	uint8 *bm, *em;
+	boolean ret;
+
+	ret = true;
+	settings = nego->transport->settings;
 
 	s = transport_send_stream_init(nego->transport, 256);
 	length = TPDU_CONNECTION_CONFIRM_LENGTH;
@@ -538,6 +565,20 @@ boolean nego_send_negotiation_response(rdpNego* nego)
 		stream_write_uint32(s, nego->selected_protocol); /* selectedProtocol */
 		length += 8;
 	}
+	else if (!settings->rdp_security)
+	{
+		stream_write_uint8(s, TYPE_RDP_NEG_FAILURE);
+		stream_write_uint8(s, 0); /* flags */
+		stream_write_uint16(s, 8); /* RDP_NEG_DATA length (8) */
+		/*
+		 * TODO: Check for other possibilities,
+		 *       like SSL_NOT_ALLOWED_BY_SERVER.
+		 */
+		printf("nego_send_negotiation_response: client supports only Standard RDP Security\n");
+		stream_write_uint32(s, SSL_REQUIRED_BY_SERVER);
+		length += 8;
+		ret = false;
+	}
 
 	stream_get_mark(s, em);
 	stream_set_mark(s, bm);
@@ -548,11 +589,42 @@ boolean nego_send_negotiation_response(rdpNego* nego)
 	if (transport_write(nego->transport, s) < 0)
 		return false;
 
-	/* update settings with negotiated protocol security */
-	nego->transport->settings->requested_protocols = nego->requested_protocols;
-	nego->transport->settings->selected_protocol = nego->selected_protocol;
+	if (ret)
+	{
+		/* update settings with negotiated protocol security */
+		settings->requested_protocols = nego->requested_protocols;
+		settings->selected_protocol = nego->selected_protocol;
 
-	return true;
+		if (settings->selected_protocol == PROTOCOL_RDP)
+		{
+			settings->tls_security = false;
+			settings->nla_security = false;
+			settings->rdp_security = true;
+			settings->encryption = true;
+			settings->encryption_method = ENCRYPTION_METHOD_40BIT | ENCRYPTION_METHOD_128BIT | ENCRYPTION_METHOD_FIPS;
+			settings->encryption_level = ENCRYPTION_LEVEL_CLIENT_COMPATIBLE;
+		}
+		else if (settings->selected_protocol == PROTOCOL_TLS)
+		{
+			settings->tls_security = true;
+			settings->nla_security = false;
+			settings->rdp_security = false;
+			settings->encryption = false;
+			settings->encryption_method = ENCRYPTION_METHOD_NONE;
+			settings->encryption_level = ENCRYPTION_LEVEL_NONE;
+		}
+		else if (settings->selected_protocol == PROTOCOL_NLA)
+		{
+			settings->tls_security = true;
+			settings->nla_security = true;
+			settings->rdp_security = false;
+			settings->encryption = false;
+			settings->encryption_method = ENCRYPTION_METHOD_NONE;
+			settings->encryption_level = ENCRYPTION_LEVEL_NONE;
+		}
+	}
+
+	return ret;
 }
 
 /**

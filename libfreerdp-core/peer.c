@@ -17,12 +17,21 @@
  * limitations under the License.
  */
 
+#include "certificate.h"
+#include <freerdp/utils/tcp.h>
+
 #include "peer.h"
 
 static boolean freerdp_peer_initialize(freerdp_peer* client)
 {
 	client->context->rdp->settings->server_mode = true;
 	client->context->rdp->state = CONNECTION_STATE_INITIAL;
+
+	if (client->context->rdp->settings->rdp_key_file != NULL)
+	{
+		client->context->rdp->settings->server_key =
+		    key_new(client->context->rdp->settings->rdp_key_file);
+	}
 
 	return true;
 }
@@ -37,12 +46,13 @@ static boolean freerdp_peer_get_fds(freerdp_peer* client, void** rfds, int* rcou
 
 static boolean freerdp_peer_check_fds(freerdp_peer* client)
 {
-	rdpRdp* rdp;
 	int status;
+	rdpRdp* rdp;
 
 	rdp = client->context->rdp;
 
 	status = rdp_check_fds(rdp);
+
 	if (status < 0)
 		return false;
 
@@ -56,7 +66,6 @@ static boolean peer_recv_data_pdu(freerdp_peer* client, STREAM* s)
 	uint32 share_id;
 	uint8 compressed_type;
 	uint16 compressed_len;
-
 
 	if (!rdp_read_share_data_header(s, &length, &type, &share_id, &compressed_type, &compressed_len))
 		return false;
@@ -73,13 +82,20 @@ static boolean peer_recv_data_pdu(freerdp_peer* client, STREAM* s)
 				return false;
 			break;
 
+		case DATA_PDU_TYPE_INPUT:
+			if (!input_recv(client->context->rdp->input, s))
+				return false;
+			break;
+
 		case DATA_PDU_TYPE_BITMAP_CACHE_PERSISTENT_LIST:
 			/* TODO: notify server bitmap cache data */
 			break;
 
 		case DATA_PDU_TYPE_FONT_LIST:
+
 			if (!rdp_server_accept_client_font_list_pdu(client->context->rdp, s))
 				return false;
+
 			if (client->PostConnect)
 			{
 				if (!client->PostConnect(client))
@@ -90,12 +106,14 @@ static boolean peer_recv_data_pdu(freerdp_peer* client, STREAM* s)
 				 */
 				client->PostConnect = NULL;
 			}
+
 			if (client->Activate)
 			{
 				/* Activate will be called everytime after the client is activated/reactivated. */
 				if (!client->Activate(client))
 					return false;
 			}
+
 			break;
 
 		case DATA_PDU_TYPE_SHUTDOWN_REQUEST:
@@ -112,16 +130,34 @@ static boolean peer_recv_data_pdu(freerdp_peer* client, STREAM* s)
 
 static boolean peer_recv_tpkt_pdu(freerdp_peer* client, STREAM* s)
 {
+	rdpRdp* rdp;
 	uint16 length;
 	uint16 pduType;
 	uint16 pduLength;
 	uint16 pduSource;
 	uint16 channelId;
+	uint16 securityFlags;
 
-	if (!rdp_read_header(client->context->rdp, s, &length, &channelId))
+	rdp = client->context->rdp;
+
+	if (!rdp_read_header(rdp, s, &length, &channelId))
 	{
 		printf("Incorrect RDP header.\n");
 		return false;
+	}
+
+	if (rdp->settings->encryption)
+	{
+		rdp_read_security_header(s, &securityFlags);
+
+		if (securityFlags & SEC_ENCRYPT)
+		{
+			if (!rdp_decrypt(rdp, s, length - 4, securityFlags))
+			{
+				printf("rdp_decrypt failed\n");
+				return false;
+			}
+		}
 	}
 
 	if (channelId != MCS_GLOBAL_CHANNEL_ID)
@@ -153,8 +189,8 @@ static boolean peer_recv_tpkt_pdu(freerdp_peer* client, STREAM* s)
 
 static boolean peer_recv_fastpath_pdu(freerdp_peer* client, STREAM* s)
 {
-	uint16 length;
 	rdpRdp* rdp;
+	uint16 length;
 	rdpFastPath* fastpath;
 
 	rdp = client->context->rdp;
@@ -169,7 +205,7 @@ static boolean peer_recv_fastpath_pdu(freerdp_peer* client, STREAM* s)
 
 	if (fastpath->encryptionFlags & FASTPATH_OUTPUT_ENCRYPTED)
 	{
-		rdp_decrypt(rdp, s, length);
+		rdp_decrypt(rdp, s, length, (fastpath->encryptionFlags & FASTPATH_OUTPUT_SECURE_CHECKSUM) ? SEC_SECURE_CHECKSUM : 0);
 	}
 
 	return fastpath_recv_inputs(fastpath, s);
@@ -215,9 +251,20 @@ static boolean peer_recv_callback(rdpTransport* transport, STREAM* s, void* extr
 			break;
 
 		case CONNECTION_STATE_MCS_CHANNEL_JOIN:
+			if (client->context->rdp->settings->encryption) {
+				if (!rdp_server_accept_client_keys(client->context->rdp, s))
+					return false;
+				break;
+			}
+			client->context->rdp->state = CONNECTION_STATE_ESTABLISH_KEYS;
+			/* FALLTHROUGH */
+
+		case CONNECTION_STATE_ESTABLISH_KEYS:
 			if (!rdp_server_accept_client_info(client->context->rdp, s))
 				return false;
+
 			IFCALL(client->Capabilities, client);
+
 			if (!rdp_send_demand_active(client->context->rdp))
 				return false;
 			break;
@@ -245,6 +292,18 @@ static boolean peer_recv_callback(rdpTransport* transport, STREAM* s, void* extr
 	}
 
 	return true;
+}
+
+static boolean freerdp_peer_close(freerdp_peer* client)
+{
+	/**
+	 * [MS-RDPBCGR] 1.3.1.4.2 User-Initiated Disconnection Sequence on Server
+	 * The server first sends the client a Deactivate All PDU followed by an
+	 * optional MCS Disconnect Provider Ultimatum PDU.
+	 */
+	if (!rdp_send_deactivate_all(client->context->rdp))
+		return false;
+	return mcs_send_disconnect_provider_ultimatum(client->context->rdp->mcs);
 }
 
 static void freerdp_peer_disconnect(freerdp_peer* client)
@@ -295,6 +354,8 @@ freerdp_peer* freerdp_peer_new(int sockfd)
 
 	client = xnew(freerdp_peer);
 
+	freerdp_tcp_set_no_delay(sockfd, true);
+
 	if (client != NULL)
 	{
 		client->sockfd = sockfd;
@@ -302,6 +363,7 @@ freerdp_peer* freerdp_peer_new(int sockfd)
 		client->Initialize = freerdp_peer_initialize;
 		client->GetFileDescriptor = freerdp_peer_get_fds;
 		client->CheckFileDescriptor = freerdp_peer_check_fds;
+		client->Close = freerdp_peer_close;
 		client->Disconnect = freerdp_peer_disconnect;
 		client->SendChannelData = freerdp_peer_send_channel_data;
 	}
@@ -317,4 +379,3 @@ void freerdp_peer_free(freerdp_peer* client)
 		xfree(client);
 	}
 }
-

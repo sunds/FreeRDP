@@ -28,7 +28,7 @@
 # limitations under the License.
 #=============================================================================
 
-find_path(XV_INCLUDE_DIR NAMES Xv.h
+find_path(XV_INCLUDE_DIR NAMES X11/extensions/Xv.h
           PATH_SUFFIXES X11/extensions
           DOC "The Xv include directory"
 )
@@ -38,7 +38,7 @@ find_library(XV_LIBRARY NAMES Xv
 )
 
 include(FindPackageHandleStandardArgs)
-FIND_PACKAGE_HANDLE_STANDARD_ARGS(XV DEFAULT_MSG XV_LIBRARY XV_INCLUDE_DIR)
+FIND_PACKAGE_HANDLE_STANDARD_ARGS(Xv DEFAULT_MSG XV_LIBRARY XV_INCLUDE_DIR)
 
 if(XV_FOUND)
   set( XV_LIBRARIES ${XV_LIBRARY} )

@@ -108,13 +108,34 @@ void Pointer_New(rdpContext* context, rdpPointer* pointer)
 
 void Pointer_Free(rdpContext* context, rdpPointer* pointer)
 {
+	if (pointer != NULL)
+	{
+		pointer->Free(context, pointer);
 
+		if (pointer->xorMaskData)
+			xfree(pointer->xorMaskData);
+
+		if (pointer->andMaskData)
+			xfree(pointer->andMaskData);
+
+		xfree(pointer);
+	}
 }
 
 /* static method */
 void Pointer_Set(rdpContext* context, rdpPointer* pointer)
 {
 	context->graphics->Pointer_Prototype->Set(context, pointer);
+}
+
+void Pointer_SetNull(rdpContext* context)
+{
+	context->graphics->Pointer_Prototype->SetNull(context);
+}
+
+void Pointer_SetDefault(rdpContext* context)
+{
+	context->graphics->Pointer_Prototype->SetDefault(context);
 }
 
 void graphics_register_pointer(rdpGraphics* graphics, rdpPointer* pointer)
@@ -207,6 +228,7 @@ void graphics_free(rdpGraphics* graphics)
 	{
 		xfree(graphics->Bitmap_Prototype);
 		xfree(graphics->Pointer_Prototype);
+		xfree(graphics->Glyph_Prototype);
 		xfree(graphics);
 	}
 }

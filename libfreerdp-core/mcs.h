@@ -20,8 +20,8 @@
 #ifndef __MCS_H
 #define __MCS_H
 
-#include "ber.h"
 #include "transport.h"
+#include <freerdp/crypto/ber.h>
 
 #include <freerdp/types.h>
 #include <freerdp/utils/stream.h>
@@ -124,7 +124,7 @@ struct rdp_mcs
 };
 typedef struct rdp_mcs rdpMcs;
 
-#define MCS_SEND_DATA_HEADER_LENGTH		8
+#define MCS_SEND_DATA_HEADER_MAX_LENGTH		8
 
 #define MCS_TYPE_CONNECT_INITIAL		0x65
 #define MCS_TYPE_CONNECT_RESPONSE		0x66
