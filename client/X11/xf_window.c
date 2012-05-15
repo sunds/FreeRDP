@@ -193,15 +193,6 @@ void xf_SetWindowStyle(xfInfo* xfi, xfWindow* window, uint32 style, uint32 ex_st
 
 	if ((ex_style & WS_EX_TOPMOST) || (ex_style & WS_EX_TOOLWINDOW))
 	{
-		/*
-		 * These include tool tips, dropdown menus, etc.  These won't work
-		 * correctly if the local window manager resizes or moves them.
-		 * Set override redirect to prevent this from occurring.
-		 */
- 
-		XSetWindowAttributes attrs;
-		attrs.override_redirect = True;
-		XChangeWindowAttributes(xfi->display, window->handle, CWOverrideRedirect, &attrs);
 		window->is_transient = true;
 		xf_SetWindowUnlisted(xfi, window);
 
@@ -625,6 +616,9 @@ void xf_SetWindowRects(xfInfo* xfi, xfWindow* window, RECTANGLE_16* rects, int n
 	int i;
 	XRectangle* xrects;
 
+	if (nrects == 0) 
+		return;
+
 	xrects = xmalloc(sizeof(XRectangle) * nrects);
 
 	for (i = 0; i < nrects; i++)
@@ -647,6 +641,9 @@ void xf_SetWindowVisibilityRects(xfInfo* xfi, xfWindow* window, RECTANGLE_16* re
 	int i;
 	XRectangle* xrects;
 
+	if (nrects == 0) 
+		return;
+
 	xrects = xmalloc(sizeof(XRectangle) * nrects);
 
 	for (i = 0; i < nrects; i++)
@@ -658,7 +655,7 @@ void xf_SetWindowVisibilityRects(xfInfo* xfi, xfWindow* window, RECTANGLE_16* re
 	}
 
 #ifdef WITH_XEXT
-	//XShapeCombineRectangles(xfi->display, window->handle, ShapeBounding, 0, 0, xrects, nrects, ShapeSet, 0);
+	XShapeCombineRectangles(xfi->display, window->handle, ShapeBounding, 0, 0, xrects, nrects, ShapeSet, 0);
 #endif
 
 	xfree(xrects);
