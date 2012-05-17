@@ -372,7 +372,7 @@ xfWindow* xf_CreateWindow(xfInfo* xfi, rdpWindow* wnd, int x, int y, int width, 
 
 	window->handle = XCreateWindow(xfi->display, RootWindowOfScreen(xfi->screen),
 		x, y, window->width, window->height, 0, xfi->depth, InputOutput, xfi->visual,
-		CWBackPixel | CWBackingStore | CWOverrideRedirect | CWColormap | 
+		CWBackPixel /*| CWBackingStore*/ | CWOverrideRedirect | CWColormap | 
 		CWBorderPixel | CWWinGravity | CWBitGravity, &xfi->attribs);
 
 	DEBUG_X11_LMS("Create  window=0x%X rc={l=%d t=%d r=%d b=%d} w=%d h=%d  rdp=0x%X",
@@ -682,12 +682,10 @@ void xf_UpdateWindowArea(xfInfo* xfi, xfWindow* window, int x, int y, int width,
 			ax, ay, ax, ay, width, height);
 	}
 
-	y += window->label.height;
-
 	XCopyArea(xfi->display, xfi->primary, window->handle, window->gc,
-			ax, ay, width, height, x, y);
-	if (y < window->label.height + 10)
-		xf_DrawLabel(xfi, window);
+			ax, ay, width, height, x, y + window->label.height);
+
+	xf_DrawLabel(xfi, window, x, y, width, height);
 
 	XFlush(xfi->display);
 }

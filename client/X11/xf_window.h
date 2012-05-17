@@ -162,6 +162,6 @@ void xf_StartLocalMoveSize(xfInfo* xfi, xfWindow* window, int direction, int x, 
 void xf_EndLocalMoveSize(xfInfo *xfi, xfWindow *window);
 void xf_SendClientEvent(xfInfo *xfi, xfWindow* window, Atom atom, unsigned int numArgs, ...);
 void xf_ConfigureLabel(xfInfo *xfi, xfWindow *xfw) ;
-void xf_DrawLabel(xfInfo *xfi, xfWindow *xfw);
+void xf_DrawLabel(xfInfo *xfi, xfWindow *xfw, int x, int y, int width, int height);
 
 #endif /* __XF_WINDOW_H */

@@ -108,12 +108,27 @@ void xf_ConfigureLabel(xfInfo *xfi, xfWindow *xfw)
 
 }
 
-void xf_DrawLabel(xfInfo *xfi, xfWindow *xfw)
+void xf_DrawLabel(xfInfo *xfi, xfWindow *xfw, int x, int y, int width, int height)
 {
-	if (! xfw->is_transient && xfw->label.label_name)
+	XRectangle rect;
+
+	if (! xfw->is_transient && xfw->label.label_name && y < 0)
 	{
+		y += xfw->label.height;
+
+		if (y + height >= xfw->label.height)
+		{
+			height = xfw->label.height - y;
+		}
+		rect.x = x;
+		rect.y = y;
+		rect.width = width;
+		rect.height = height;
+
+		XSetClipRectangles(xfi->display, xfw->label.gc, 0, 0, &rect, 1, Unsorted);
+
 		XClearArea(xfi->display, xfw->handle, 
-			0, 0, xfw->width, xfw->label.height, False);
+			x, y, width, height, False);
 
 		XDrawString(xfi->display, xfw->handle, xfw->label.gc,
 			(xfw->width / 2) - (xfw->label.width / 2), 
