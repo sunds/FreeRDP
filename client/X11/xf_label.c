@@ -40,6 +40,7 @@ void xf_ConfigureLabel(xfInfo *xfi, xfWindow *xfw)
 	XCharStruct overall_return;
 
 	rdpWindow *rdp = xfw->window;
+/*
 	printf("window=0x%X offset=%d,%d delta=%d,%d, clientArea= %d,%d %d+%d  visible=%d,%d  size=%d+%d\n",
 		xfw->handle,
 		rdp->windowOffsetX, rdp->windowOffsetY,
@@ -47,7 +48,7 @@ void xf_ConfigureLabel(xfInfo *xfi, xfWindow *xfw)
 		rdp->clientOffsetX, rdp->clientOffsetY, rdp->clientAreaWidth, rdp->clientAreaHeight,
 		rdp->visibleOffsetX, rdp->visibleOffsetY,
 		rdp->windowWidth, rdp->windowHeight);
-
+*/
 	if (xfw->is_transient) 
 	{
 		return;
