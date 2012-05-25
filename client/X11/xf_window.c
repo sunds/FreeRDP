@@ -477,8 +477,6 @@ void xf_LabelBarMove(xfInfo* xfi, xfWindow* window, int x, int y)
 
 void xf_StartLocalMoveSize(xfInfo* xfi, xfWindow* window, int direction, int x, int y)
 {
-	Window child_window;
-
 	if (window->local_move.state != LMS_NOT_ACTIVE)
 		return;
 
@@ -490,18 +488,13 @@ void xf_StartLocalMoveSize(xfInfo* xfi, xfWindow* window, int direction, int x, 
 		window->window->windowOffsetX, window->window->windowOffsetY, 
 		window->window->windowWidth, window->window->windowHeight, x, y);
 
+	/*
+	* Save original mouse location relative to root.  This will be needed
+	* to end local move to RDP server and/or X server
+	*/
 	window->local_move.root_x = x; 
 	window->local_move.root_y = y;
 	window->local_move.state = LMS_STARTING;
-
-printf("window\n");
-	XTranslateCoordinates(xfi->display, RootWindowOfScreen(xfi->screen), window->handle, 
-		window->local_move.root_x, 
-		window->local_move.root_y,
-		&window->local_move.window_x, 
-		&window->local_move.window_y, 
-		&child_window);
-printf("window\n");
 
 	XUngrabPointer(xfi->display, CurrentTime);
 
