@@ -127,9 +127,11 @@ static boolean xf_event_MotionNotify(xfInfo* xfi, XEvent* event, boolean app)
 	if (app)
 	{
 		// Translate to desktop coordinates
+printf("evt 1\n");
 		XTranslateCoordinates(xfi->display, event->xmotion.window,
 			RootWindowOfScreen(xfi->screen),
 			x, y, &x, &y, &childWindow);
+printf("evt 1\n");
 	}
 
 	input->MouseEvent(input, PTR_FLAGS_MOVE, x, y);
@@ -150,6 +152,9 @@ static boolean xf_event_ButtonPress(xfInfo* xfi, XEvent* event, boolean app)
 	boolean wheel;
 	boolean extended;
 	rdpInput* input;
+	rdpWindow* window;
+	rdpRail* rail;
+	boolean labelBarMove = false;
 
 	input = xfi->instance->input;
 
@@ -224,16 +229,33 @@ static boolean xf_event_ButtonPress(xfInfo* xfi, XEvent* event, boolean app)
 		{
 			if (app)
 			{
+				rail = ((rdpContext*) xfi->context)->rail;
+				window = window_list_get_by_extra_id(rail->list, (void*) event->xclient.window);
+
+				if (window &&  y < ((xfWindow *)window->extra)->label.height) 
+				{
+					labelBarMove = true;
+				}
+
 				// Translate to desktop coordinates
+printf("evt 2\n");
 				XTranslateCoordinates(xfi->display, event->xmotion.window,
 					RootWindowOfScreen(xfi->screen),
 					x, y, &x, &y, &childWindow);
+printf("evt 2\n");
 			}
 
-			if (extended)
-				input->ExtendedMouseEvent(input, flags, x, y);
+			if (labelBarMove)
+			{
+				xf_StartLocalMoveSize(xfi, (xfWindow *)window->extra, _NET_WM_MOVERESIZE_MOVE, x, y);
+			}
 			else
-				input->MouseEvent(input, flags, x, y);
+			{
+				if (extended)
+					input->ExtendedMouseEvent(input, flags, x, y);
+				else
+					input->MouseEvent(input, flags, x, y);
+			}
 		}
 	}
 
@@ -303,9 +325,11 @@ static boolean xf_event_ButtonRelease(xfInfo* xfi, XEvent* event, boolean app)
 		if (app)
 		{
 			// Translate to desktop coordinates
+printf("evt 3\n");
 			XTranslateCoordinates(xfi->display, event->xmotion.window,
 				RootWindowOfScreen(xfi->screen),
 				x, y, &x, &y, &childWindow);
+printf("evt 3\n");
 		}
 
 		if (extended)
@@ -481,37 +505,45 @@ static boolean xf_event_ConfigureNotify(xfInfo* xfi, XEvent* event, boolean app)
         rdpWindow* window;
         rdpRail* rail = ((rdpContext*) xfi->context)->rail;
 
-        window = window_list_get_by_extra_id(rail->list, (void*) event->xconfigure.window);
+	/* 
+	* If the window has been moved by the local window manager we will
+	* need to send an update to the RDP sever.  
+	*/
+	if (app && ! event->xconfigure.send_event)
+	{
+        	window = window_list_get_by_extra_id(
+			rail->list, (void*) event->xconfigure.window);
 
-        if (window != NULL)
-        {
-                xfWindow* xfw;
-                Window childWindow;
-                xfw = (xfWindow*) window->extra;
+        	if (window != NULL)
+        	{
+                	xfWindow* xfw;
+               	 	Window childWindow;
+               	 	xfw = (xfWindow*) window->extra;
 
-                /*
-                 * ConfigureNotify coordinates are expressed relative to the window parent.
-                 * Translate these to root window coordinates.
-                 */
+                	/*
+                 	* ConfigureNotify coordinates are expressed relative to the window parent.
+                 	* Translate these to root window coordinates.
+                 	*/
+printf("evt 4\n");
+                	XTranslateCoordinates(xfi->display, xfw->handle, 
+				RootWindowOfScreen(xfi->screen),
+                       	 	0, 0, &xfw->left, &xfw->top, &childWindow);
+printf("evt 4\n");
 
-                XTranslateCoordinates(xfi->display, xfw->handle, 
-			RootWindowOfScreen(xfi->screen),
-                        0, 0, &xfw->left, &xfw->top, &childWindow);
+                	xfw->width = event->xconfigure.width;
+                	xfw->height = event->xconfigure.height;
+                	xfw->right = xfw->left + xfw->width - 1;
+                	xfw->bottom = xfw->top + xfw->height - 1;
 
-                xfw->width = event->xconfigure.width;
-                xfw->height = event->xconfigure.height;
-                xfw->right = xfw->left + xfw->width - 1;
-                xfw->bottom = xfw->top + xfw->height - 1;
+			xfw->top += xfw->label.height;
+			xfw->height -= xfw->label.height;
 
-		xfw->top += xfw->label.height;
-		xfw->height -= xfw->label.height;
+			DEBUG_X11_LMS("window=0x%X rc={l=%d t=%d r=%d b=%d} w=%u h=%u send_event=%d",
+				(uint32) xfw->handle, xfw->left, xfw->top, xfw->right, xfw->bottom,
+				xfw->width, xfw->height, event->xconfigure.send_event);
 
-		DEBUG_X11_LMS("window=0x%X rc={l=%d t=%d r=%d b=%d} w=%u h=%u send_event=%d",
-			(uint32) xfw->handle, xfw->left, xfw->top, xfw->right, xfw->bottom,
-			xfw->width, xfw->height, event->xconfigure.send_event);
-
-		if (app && ! event->xconfigure.send_event)
 			xf_rail_adjust_position(xfi, window);
+		}
         }
 
         return True;

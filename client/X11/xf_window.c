@@ -461,6 +461,20 @@ void xf_SetWindowMinMaxInfo(xfInfo* xfi, xfWindow* window,
 	}
 }
 
+void xf_LabelBarMove(xfInfo* xfi, xfWindow* window, int x, int y)
+{
+	XUngrabPointer(xfi->display, CurrentTime);
+
+	xf_SendClientEvent(xfi, window, 
+			xfi->_NET_WM_MOVERESIZE, /* request X window manager to initiate a local move */
+			5, /* 5 arguments to follow */
+			x, /* x relative to root window */
+			y, /* y relative to root window */
+			_NET_WM_MOVERESIZE_MOVE, /* extended ICCM direction flag */
+			1, /* simulated mouse button 1 */
+		       	1); /* 1 == application request per extended ICCM */
+}
+
 void xf_StartLocalMoveSize(xfInfo* xfi, xfWindow* window, int direction, int x, int y)
 {
 	Window child_window;
@@ -480,12 +494,14 @@ void xf_StartLocalMoveSize(xfInfo* xfi, xfWindow* window, int direction, int x, 
 	window->local_move.root_y = y;
 	window->local_move.state = LMS_STARTING;
 
+printf("window\n");
 	XTranslateCoordinates(xfi->display, RootWindowOfScreen(xfi->screen), window->handle, 
 		window->local_move.root_x, 
 		window->local_move.root_y,
 		&window->local_move.window_x, 
 		&window->local_move.window_y, 
 		&child_window);
+printf("window\n");
 
 	XUngrabPointer(xfi->display, CurrentTime);
 
@@ -493,7 +509,7 @@ void xf_StartLocalMoveSize(xfInfo* xfi, xfWindow* window, int direction, int x, 
 			xfi->_NET_WM_MOVERESIZE, /* request X window manager to initiate a local move */
 			5, /* 5 arguments to follow */
 			x, /* x relative to root window */
-			y, /* y relative to root window */
+			y + window->label.height, /* y relative to root window */
 			direction, /* extended ICCM direction flag */
 			1, /* simulated mouse button 1 */
 		       	1); /* 1 == application request per extended ICCM */
@@ -639,7 +655,7 @@ void xf_SetWindowRects(xfInfo* xfi, xfWindow* window, RECTANGLE_16* rects, int n
 	if (nrects == 0) 
 		return;
 
-	xrects = xmalloc(sizeof(XRectangle) * nrects);
+	xrects = xmalloc(sizeof(XRectangle) * (nrects + 1));
 
 	for (i = 0; i < nrects; i++)
 	{
@@ -649,8 +665,13 @@ void xf_SetWindowRects(xfInfo* xfi, xfWindow* window, RECTANGLE_16* rects, int n
 		xrects[i].height = rects[i].bottom - rects[i].top;
 	}
 
+	xrects[nrects].x = 0;
+	xrects[nrects].y = 0;
+	xrects[nrects].width = window->width;
+	xrects[nrects].height = window->label.height;
+
 #ifdef WITH_XEXT
-	XShapeCombineRectangles(xfi->display, window->handle, ShapeBounding, 0, 0, xrects, nrects, ShapeSet, 0);
+	XShapeCombineRectangles(xfi->display, window->handle, ShapeBounding, 0, 0, xrects, nrects + 1, ShapeSet, 0);
 #endif
 
 	xfree(xrects);
@@ -664,7 +685,7 @@ void xf_SetWindowVisibilityRects(xfInfo* xfi, xfWindow* window, RECTANGLE_16* re
 	if (nrects == 0) 
 		return;
 
-	xrects = xmalloc(sizeof(XRectangle) * nrects);
+	xrects = xmalloc(sizeof(XRectangle) * (nrects + 1));
 
 	for (i = 0; i < nrects; i++)
 	{
@@ -674,8 +695,13 @@ void xf_SetWindowVisibilityRects(xfInfo* xfi, xfWindow* window, RECTANGLE_16* re
 		xrects[i].height = rects[i].bottom - rects[i].top;
 	}
 
+	xrects[nrects].x = 0;
+	xrects[nrects].y = 0;
+	xrects[nrects].width = window->width;
+	xrects[nrects].height = window->label.height;
+
 #ifdef WITH_XEXT
-	XShapeCombineRectangles(xfi->display, window->handle, ShapeBounding, 0, 0, xrects, nrects, ShapeSet, 0);
+	XShapeCombineRectangles(xfi->display, window->handle, ShapeBounding, 0, 0, xrects, nrects + 1, ShapeSet, 0);
 #endif
 
 	xfree(xrects);
