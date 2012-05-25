@@ -127,11 +127,9 @@ static boolean xf_event_MotionNotify(xfInfo* xfi, XEvent* event, boolean app)
 	if (app)
 	{
 		// Translate to desktop coordinates
-printf("evt 1\n");
 		XTranslateCoordinates(xfi->display, event->xmotion.window,
 			RootWindowOfScreen(xfi->screen),
 			x, y, &x, &y, &childWindow);
-printf("evt 1\n");
 	}
 
 	input->MouseEvent(input, PTR_FLAGS_MOVE, x, y);
@@ -238,11 +236,9 @@ static boolean xf_event_ButtonPress(xfInfo* xfi, XEvent* event, boolean app)
 				}
 
 				// Translate to desktop coordinates
-printf("evt 2\n");
 				XTranslateCoordinates(xfi->display, event->xmotion.window,
 					RootWindowOfScreen(xfi->screen),
 					x, y, &x, &y, &childWindow);
-printf("evt 2\n");
 			}
 
 			if (labelBarMove)
@@ -325,11 +321,9 @@ static boolean xf_event_ButtonRelease(xfInfo* xfi, XEvent* event, boolean app)
 		if (app)
 		{
 			// Translate to desktop coordinates
-printf("evt 3\n");
 			XTranslateCoordinates(xfi->display, event->xmotion.window,
 				RootWindowOfScreen(xfi->screen),
 				x, y, &x, &y, &childWindow);
-printf("evt 3\n");
 		}
 
 		if (extended)
@@ -524,11 +518,9 @@ static boolean xf_event_ConfigureNotify(xfInfo* xfi, XEvent* event, boolean app)
                  	* ConfigureNotify coordinates are expressed relative to the window parent.
                  	* Translate these to root window coordinates.
                  	*/
-printf("evt 4\n");
                 	XTranslateCoordinates(xfi->display, xfw->handle, 
 				RootWindowOfScreen(xfi->screen),
                        	 	0, 0, &xfw->left, &xfw->top, &childWindow);
-printf("evt 4\n");
 
                 	xfw->width = event->xconfigure.width;
                 	xfw->height = event->xconfigure.height;

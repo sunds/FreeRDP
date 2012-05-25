@@ -523,11 +523,9 @@ void xf_process_rail_server_localmovesize_event(xfInfo* xfi, rdpChannels* channe
 				break;
 			case RAIL_WMSZ_MOVE: //0x9
 				direction = _NET_WM_MOVERESIZE_MOVE;
-printf("rail\n");
 				XTranslateCoordinates(xfi->display, xfw->handle, 
 					RootWindowOfScreen(xfi->screen), 
 					movesize->posX, movesize->posY, &x, &y, &child_window);
-printf("rail\n");
 				break;
 			case RAIL_WMSZ_KEYMOVE: //0xA
 				direction = _NET_WM_MOVERESIZE_MOVE_KEYBOARD;
